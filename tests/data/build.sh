@@ -1,0 +1,1 @@
+javac -target 11 Basic.java
