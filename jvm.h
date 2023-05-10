@@ -33,6 +33,8 @@ typedef struct Value {
     } as;
 } Value;
 
+#define VAL_STR(v) ((String *)v.as.ptr)
+
 // Constants
 // These are stored as int32 Value type
 typedef struct CONSTANT_index_info {
