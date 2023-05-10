@@ -10,6 +10,8 @@
 
 int jvm_printf(const char *format, ...);
 
+void *jmalloc(size_t n);
+
 typedef struct ByteBuf {
     uint8_t *data;
     size_t size;
@@ -23,6 +25,8 @@ u1 bytebuf_read(ByteBuf *buf);
 u2 bytebuf_readu2(ByteBuf *buf);
 u4 bytebuf_readu4(ByteBuf *buf);
 u8 bytebuf_readu8(ByteBuf *buf);
+
+int bytebuf_readbytes(ByteBuf *buf, u1 *str, size_t size);
 
 int read_file(const char *filename, ByteBuf *b);
 

@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "util.h"
 
 
@@ -16,6 +17,10 @@ int jvm_printf(const char *format, ...) {
     return result;
 }
 
+void *jmalloc(size_t n) {
+    return malloc(n);
+}
+
 int read_file(const char *filename, ByteBuf *b) {
     FILE *f = fopen(filename, "rb");
     if(!f) return -1;
@@ -23,7 +28,7 @@ int read_file(const char *filename, ByteBuf *b) {
     size_t s = ftell(f);
     if(s == -1) return -1;
 
-    uint8_t *c = (uint8_t *)malloc(s);
+    uint8_t *c = (uint8_t *)jmalloc(s);
     if(c == NULL) return -1;
 
     rewind(f);
@@ -57,7 +62,7 @@ u2 bytebuf_readu2(ByteBuf *buf) {
 
 u4 bytebuf_readu4(ByteBuf *buf) {
     if(buf->off == buf->size) return 0;
-    u2 r = (buf->data[buf->off] << 24) |
+    u4 r = (buf->data[buf->off] << 24) |
            (buf->data[buf->off + 1] << 16) |
            (buf->data[buf->off+2] << 8) |
            buf->data[buf->off+3];
@@ -66,5 +71,24 @@ u4 bytebuf_readu4(ByteBuf *buf) {
 }
 
 u8 bytebuf_readu8(ByteBuf *buf) {
-    return -1;
+    if(buf->off == buf->size) return 0;
+    u8 r = ((u8)buf->data[buf->off] << 56) |
+           ((u8)buf->data[buf->off + 1] << 48) |
+           ((u8)buf->data[buf->off+2] << 40) |
+            ((u8)buf->data[buf->off+3] << 32) |
+            ((u8)buf->data[buf->off+4] << 24) |
+            ((u8)buf->data[buf->off+5] << 16) |
+            ((u8)buf->data[buf->off+6] << 8) |
+           buf->data[buf->off+7];
+    buf->off += 8;
+    return r;
+}
+
+int bytebuf_readbytes(ByteBuf *buf, u1 *str, size_t size) {
+    if(buf->off + size > buf->size) {
+        return -1;
+    }
+    memcpy(str, &buf->data[buf->off], size);
+    buf->off += size;
+    return 0;
 }
