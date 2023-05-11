@@ -84,11 +84,11 @@ u8 bytebuf_readu8(ByteBuf *buf) {
     return r;
 }
 
-int bytebuf_readbytes(ByteBuf *buf, u1 *str, size_t size) {
+int bytebuf_readbytes(ByteBuf *buf, u1 *bytes, size_t size) {
     if(buf->off + size > buf->size) {
         return -1;
     }
-    memcpy(str, &buf->data[buf->off], size);
+    memcpy(bytes, &buf->data[buf->off], size);
     buf->off += size;
     return 0;
 }

@@ -79,50 +79,73 @@ typedef struct Constant {
     Value value;
 } Constant;
 
-typedef struct cp_info {
-    u1 tag;
-    u1 info[];
-} cp_info;
-
-typedef struct interfaces {
-
-} interfaces;
-
-typedef struct field_info {
-
-} field_info;
-
-typedef struct method_info {
-
-} method_info;
+// fields
 
 typedef struct attribute_info {
-
+    u2 attribute_name_index;
+    u4 attribute_length;
+    u1 *data;
 } attribute_info;
 
-typedef struct ClassFile {
-    u4             magic;
-    u2             minor_version;
-    u2             major_version;
-    u2             constant_pool_count;
-    cp_info        *constant_pool;
+typedef enum field_flags {
+    FIELD_PUBLIC = 0x0001,
+    FIELD_PRIVATE = 0x0002,
+    FIELD_PROTECTED = 0x0004,
+    FIELD_STATIC = 0x0008,
+    FIELD_FINAL = 0x0010,
+    FIELD_VOLATILE = 0x0040,
+    FIELD_TRANSIENT = 0x0080,
+    FIELD_SYNTHETIC = 0x1000,
+    FIELD_ENUM = 0x4000
+} field_flags;
+
+typedef struct field_info {
+    u2             access_flags;
+    u2             name_index;
+    u2             descriptor_index;
+    u2             attributes_count;
+    attribute_info *attributes;
+} field_info;
+
+typedef enum method_flags {
+    METHOD_PUBLIC = 0x0001,
+    METHOD_PRIVATE = 0x0002,
+    METHOD_PROTECTED = 0x0004,
+    METHOD_STATIC = 0x0008,
+    METHOD_FINAL = 0x0010,
+    METHOD_SYNCHRONIZED = 0x0020,
+    METHOD_BRIDGE = 0x0040,
+    METHOD_VARARGS = 0x0080,
+    METHOD_NATIVE = 0x0100,
+    METHOD_ABSTRACT = 0x0400,
+    METHOD_STRICT = 0x0800,
+    METHOD_SYNTHETIC = 0x1000
+} method_flags;
+
+typedef struct method_info {
+    u2             access_flags;
+    u2             name_index;
+    u2             descriptor_index;
+    u2             attributes_count;
+    attribute_info *attributes;
+} method_info;
+
+typedef struct JClass {
+    u2 major_version;
+    u2 minor_version;
+    Constant *constants; // 1-indexed
+    u2 n_constants;
     u2             access_flags;
     u2             this_class;
     u2             super_class;
-    u2             interfaces_count;
-    u2             *interfaces;
-    u2             fields_count;
+    u2             n_interfaces;
+    u2             *interfaces; // indexes into constant table
+    u2             n_fields;
     field_info     *fields;
-    u2             methods_count;
+    u2             n_methods;
     method_info    *methods;
-    u2             attributes_count;
+    u2             n_attributes;
     attribute_info *attributes;
-} ClassFile;
-
-typedef struct JClass {
-    ClassFile cf;
-    Constant *constants; // 1-indexed
-    u2 n_constants;
 } JClass;
 
 #endif //TINYJVM_JVM_H

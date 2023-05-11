@@ -26,7 +26,7 @@ u2 bytebuf_readu2(ByteBuf *buf);
 u4 bytebuf_readu4(ByteBuf *buf);
 u8 bytebuf_readu8(ByteBuf *buf);
 
-int bytebuf_readbytes(ByteBuf *buf, u1 *str, size_t size);
+int bytebuf_readbytes(ByteBuf *buf, u1 *bytes, size_t size);
 
 int read_file(const char *filename, ByteBuf *b);
 

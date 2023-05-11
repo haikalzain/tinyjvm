@@ -91,19 +91,107 @@ int parse_constant_pool(JClass *cl, ByteBuf *buf) {
             return -1;
         }
     }
+    // should error (for all parse functions) if passed eof
 
     return 0;
 }
 
-int read_class_from_bytes(JClass *cl, ByteBuf *buf) {
-    u4 magic = bytebuf_readu4(buf);
-    if(magic != 0xcafebabe) return -1;
-    u2 minor_version = bytebuf_readu2(buf);
-    u2 major_version = bytebuf_readu2(buf);
-    if(major_version > 55) {
-        jvm_printf("Unsupported major version %d\n", cl->cf.major_version);
+int parse_interfaces(JClass *cl, ByteBuf *buf) {
+    cl->n_interfaces = bytebuf_readu2(buf);
+    cl->interfaces = jmalloc(cl->n_interfaces * sizeof(u2));
+    for(int i=0;i<cl->n_interfaces;i++) {
+        cl->interfaces[i] = bytebuf_readu2(buf);
+    }
+    return 0;
+}
+
+int _parse_attributes_helper(JClass *cl, ByteBuf *buf, u2 *n, attribute_info **a) {
+    *n = bytebuf_readu2(buf);
+    *a = jmalloc(*n * sizeof(u2));
+    for(int i=0;i<*n;i++) {
+        (*a)->attribute_name_index = bytebuf_readu2(buf);
+        (*a)->attribute_length = bytebuf_readu4(buf);
+        (*a)->data = jmalloc((*a)->attribute_length);
+        if(bytebuf_readbytes(buf, (*a)->data, (*a)->attribute_length) == -1) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int parse_fields(JClass *cl, ByteBuf *buf) {
+    cl->n_fields = bytebuf_readu2(buf);
+    cl->fields = jmalloc(cl->n_fields * sizeof(u2));
+    for(int i=0;i<cl->n_fields;i++) {
+        cl->fields[i].access_flags = bytebuf_readu2(buf);
+        cl->fields[i].name_index = bytebuf_readu2(buf);
+        cl->fields[i].descriptor_index = bytebuf_readu2(buf);
+        if(_parse_attributes_helper(
+                cl, buf, &cl->fields[i].attributes_count, &cl->fields->attributes) == -1) {
+            jvm_printf("Error parsing field attributes\n");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int parse_methods(JClass *cl, ByteBuf *buf) {
+    cl->n_methods = bytebuf_readu2(buf);
+    cl->methods = jmalloc(cl->n_methods * sizeof(u2));
+    for(int i=0;i<cl->n_methods;i++) {
+        cl->methods[i].access_flags = bytebuf_readu2(buf);
+        cl->methods[i].name_index = bytebuf_readu2(buf);
+        cl->methods[i].descriptor_index = bytebuf_readu2(buf);
+        if(_parse_attributes_helper(
+                cl, buf, &cl->methods[i].attributes_count, &cl->methods->attributes) == -1) {
+            jvm_printf("Error parsing method attributes\n");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+int parse_attributes(JClass *cl, ByteBuf *buf) {
+    if(_parse_attributes_helper(
+            cl, buf, &cl->n_attributes, &cl->attributes) == -1) {
+        jvm_printf("Error parsing attributes\n");
         return -1;
     }
-    parse_constant_pool(cl, buf);
+    return 0;
+}
+
+int read_class_from_bytes(JClass *cl, ByteBuf *buf) {
+    // TODO Should verify data after parsing. jmalloc failures should be checked (or panic for now)
+    u4 magic = bytebuf_readu4(buf);
+    if(magic != 0xcafebabe) return -1;
+    cl->minor_version = bytebuf_readu2(buf);
+    cl->major_version = bytebuf_readu2(buf);
+    if(cl->major_version > 55) {
+        jvm_printf("Unsupported major version %d\n", cl->major_version);
+        return -1;
+    }
+    if(parse_constant_pool(cl, buf) == -1) {
+        jvm_printf("Error parsing constant pool\n");
+        return -1;
+    }
+    cl->access_flags = bytebuf_readu2(buf);
+    cl->this_class = bytebuf_readu2(buf);
+    cl->super_class = bytebuf_readu2(buf);
+    if(parse_interfaces(cl, buf) == -1) {
+        jvm_printf("Error parsing interfaces\n");
+        return -1;
+    }
+    if(parse_fields(cl, buf) == -1) {
+        jvm_printf("Error parsing fields\n");
+        return -1;
+    }
+    if(parse_methods(cl, buf) == -1) {
+        jvm_printf("Error parsing methods\n");
+        return -1;
+    }
+    if(parse_attributes(cl, buf) == -1) {
+        jvm_printf("Error parsing attributes\n");
+        return -1;
+    }
     return 0;
 }

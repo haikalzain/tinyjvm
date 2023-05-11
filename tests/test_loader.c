@@ -39,6 +39,21 @@ void test_basic_class() {
     ASSERT_EQ(27, class.n_constants);
     ASSERT_STR_EQ("<init>", VAL_STR(class.constants[6].value));
     ASSERT_STR_EQ("([Ljava/lang/String;)V", VAL_STR(class.constants[11].value));
+    ASSERT_EQ(0, class.n_interfaces);
+    ASSERT_EQ(0, class.n_fields);
+    ASSERT_EQ(2, class.n_methods);
+    ASSERT_EQ(1, class.n_attributes);
+
+    ASSERT_EQ(METHOD_PUBLIC, class.methods[0].access_flags);
+    ASSERT_EQ(7, class.methods[0].descriptor_index);
+    ASSERT_EQ(6, class.methods[0].name_index);
+    ASSERT_EQ(1, class.methods[0].attributes_count);
+    // TODO need to test attributes
+
+    ASSERT_EQ(METHOD_PUBLIC | METHOD_STATIC, class.methods[1].access_flags);
+    ASSERT_EQ(11, class.methods[1].descriptor_index);
+    ASSERT_EQ(10, class.methods[1].name_index);
+    ASSERT_EQ(1, class.methods[1].attributes_count);
 }
 
 int main() {
