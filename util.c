@@ -42,6 +42,7 @@ int read_file(const char *filename, ByteBuf *b) {
     return 0;
 }
 
+// bytebuf doesn't own data, and is not responsible for freeing
 void bytebuf_create(ByteBuf *buf, uint8_t *data, size_t size) {
     buf->data = data;
     buf->size = size;

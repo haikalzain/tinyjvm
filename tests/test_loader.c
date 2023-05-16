@@ -56,8 +56,17 @@ void test_basic_class() {
     ASSERT_EQ(1, class.methods[1].attributes_count);
 }
 
+void test_execute_basic_class() {
+    ByteBuf buf;
+    JClass class;
+    read_file("tests/data/Basic.class", &buf);
+    read_class_from_bytes(&class, &buf);
+    jvm_execute_class(&class, NULL);
+}
+
 int main() {
     test_basic_class();
+    test_execute_basic_class();
     printf("TESTS RUN: %d FAILURES: %d\n", num_tests, failures);
 
 }

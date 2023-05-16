@@ -17,6 +17,8 @@ typedef struct String {
 } String;
 
 void str_create(String *str, u1 *data, u2 size);
+int str_compare(String *s1, String *s2);
+int str_compare_raw(String *s1, char *s2);
 
 typedef enum ValueType {
     INT, DOUBLE, STRING, LONG, FLOAT
@@ -79,13 +81,24 @@ typedef struct Constant {
     Value value;
 } Constant;
 
-// fields
+//all the attribute types
 
 typedef struct attribute_info {
     u2 attribute_name_index;
     u4 attribute_length;
     u1 *data;
 } attribute_info;
+
+typedef struct ModuleMainClass_attribute {
+u2 attribute_name_index;
+u4 attribute_length;
+u2 main_class_index;
+} ModuleMainClass_attribute;
+
+
+
+
+// fields
 
 typedef enum field_flags {
     FIELD_PUBLIC = 0x0001,
@@ -130,6 +143,31 @@ typedef struct method_info {
     attribute_info *attributes;
 } method_info;
 
+typedef struct JByteCode {
+    u2 max_stack;
+    u2 max_locals;
+    u4 code_length;
+    u1 *code;
+    /*u2 exception_table_length;
+    {   u2 start_pc;
+        u2 end_pc;
+        u2 handler_pc;
+        u2 catch_type;
+    } exception_table[exception_table_length];*/
+    u2 attributes_count;
+    attribute_info *attributes;
+} JByteCode;
+
+typedef struct JMethod {
+    u2             access_flags;
+    u2             name_index;
+    u2             descriptor_index;
+    u2             attributes_count;
+    attribute_info *attributes;
+    // some representation of code
+    JByteCode code;
+} JMethod;
+
 typedef struct JClass {
     u2 major_version;
     u2 minor_version;
@@ -143,9 +181,28 @@ typedef struct JClass {
     u2             n_fields;
     field_info     *fields;
     u2             n_methods;
-    method_info    *methods;
+    JMethod    *methods;
+    //JMethod *method; should be a hashmap
+
     u2             n_attributes;
     attribute_info *attributes;
 } JClass;
+
+
+String *jclass_constants_get_string(JClass *class, u2 index);
+cp_tags jclass_constants_get_tag(JClass *class, u2 index);
+
+
+typedef struct Runtime {
+    // cache loaded classes
+
+    // some instance of GC
+} Runtime;
+
+typedef struct Options {
+
+} Options;
+
+int jvm_execute_class(JClass *class, Options *options);
 
 #endif //TINYJVM_JVM_H

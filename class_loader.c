@@ -80,7 +80,7 @@ int parse_constant(Constant *c, ByteBuf *buf) {
 
 int parse_constant_pool(JClass *cl, ByteBuf *buf) {
     cl->n_constants = bytebuf_readu2(buf);
-    cl->constants = (Constant *)jmalloc(cl->n_constants);
+    cl->constants = (Constant *)jmalloc(cl->n_constants * sizeof(Constant));
     // need to set cl->constants[0]
     for(int i = 1;i<cl->n_constants;i++) {
         Constant cons;
@@ -98,7 +98,7 @@ int parse_constant_pool(JClass *cl, ByteBuf *buf) {
 
 int parse_interfaces(JClass *cl, ByteBuf *buf) {
     cl->n_interfaces = bytebuf_readu2(buf);
-    cl->interfaces = jmalloc(cl->n_interfaces * sizeof(u2));
+    cl->interfaces = jmalloc(cl->n_interfaces * sizeof(cl->interfaces[0]));
     for(int i=0;i<cl->n_interfaces;i++) {
         cl->interfaces[i] = bytebuf_readu2(buf);
     }
@@ -107,9 +107,14 @@ int parse_interfaces(JClass *cl, ByteBuf *buf) {
 
 int _parse_attributes_helper(JClass *cl, ByteBuf *buf, u2 *n, attribute_info **a) {
     *n = bytebuf_readu2(buf);
-    *a = jmalloc(*n * sizeof(u2));
+    *a = jmalloc(*n * sizeof(*a[0]));
     for(int i=0;i<*n;i++) {
         (*a)->attribute_name_index = bytebuf_readu2(buf);
+        if(jclass_constants_get_tag(cl, (*a)->attribute_name_index) != CONSTANT_Utf8) {
+            jvm_printf("Expected constant tag to be UTF8\n");
+            return -1;
+        }
+
         (*a)->attribute_length = bytebuf_readu4(buf);
         (*a)->data = jmalloc((*a)->attribute_length);
         if(bytebuf_readbytes(buf, (*a)->data, (*a)->attribute_length) == -1) {
@@ -121,7 +126,7 @@ int _parse_attributes_helper(JClass *cl, ByteBuf *buf, u2 *n, attribute_info **a
 
 int parse_fields(JClass *cl, ByteBuf *buf) {
     cl->n_fields = bytebuf_readu2(buf);
-    cl->fields = jmalloc(cl->n_fields * sizeof(u2));
+    cl->fields = jmalloc(cl->n_fields * sizeof(cl->fields[0]));
     for(int i=0;i<cl->n_fields;i++) {
         cl->fields[i].access_flags = bytebuf_readu2(buf);
         cl->fields[i].name_index = bytebuf_readu2(buf);
@@ -135,17 +140,51 @@ int parse_fields(JClass *cl, ByteBuf *buf) {
     return 0;
 }
 
+int parse_code_attribute(JByteCode *code, ByteBuf *buf) {
+    code->max_stack = bytebuf_readu2(buf);
+    code->max_locals = bytebuf_readu2(buf);
+    code->code_length = bytebuf_readu4(buf);
+    code->code = jmalloc(code->code_length);
+    if(bytebuf_readbytes(buf, code->code, code->code_length) == -1) {
+        return -1;
+    }
+    /*
+     * u2 exception_table_length;
+    {   u2 start_pc;
+        u2 end_pc;
+        u2 handler_pc;
+        u2 catch_type;
+    } exception_table[exception_table_length];
+    u2 attributes_count;
+    attribute_info attributes[attributes_count];
+     */
+    return 0;
+}
+
 int parse_methods(JClass *cl, ByteBuf *buf) {
     cl->n_methods = bytebuf_readu2(buf);
-    cl->methods = jmalloc(cl->n_methods * sizeof(u2));
+    cl->methods = jmalloc(cl->n_methods * sizeof(cl->methods[0]));
     for(int i=0;i<cl->n_methods;i++) {
         cl->methods[i].access_flags = bytebuf_readu2(buf);
         cl->methods[i].name_index = bytebuf_readu2(buf);
         cl->methods[i].descriptor_index = bytebuf_readu2(buf);
         if(_parse_attributes_helper(
-                cl, buf, &cl->methods[i].attributes_count, &cl->methods->attributes) == -1) {
+                cl, buf, &cl->methods[i].attributes_count, &cl->methods[i].attributes) == -1) {
             jvm_printf("Error parsing method attributes\n");
             return -1;
+        }
+
+        // process attributes
+        for(int j=0;j<cl->methods[i].attributes_count;j++) {
+            attribute_info a = cl->methods[i].attributes[j];
+            String *name = jclass_constants_get_string(cl, a.attribute_name_index);
+            if(str_compare_raw(name, "Code") == 0) {
+                ByteBuf b;
+                bytebuf_create(&b, a.data, a.attribute_length);
+                if(parse_code_attribute(&cl->methods[i].code, &b) == -1) {
+                    return -1;
+                }
+            }
         }
     }
     return 0;
@@ -194,4 +233,11 @@ int read_class_from_bytes(JClass *cl, ByteBuf *buf) {
         return -1;
     }
     return 0;
+}
+
+String *jclass_constants_get_string(JClass *class, u2 index) {
+    return class->constants[index].value.as.ptr;
+}
+cp_tags jclass_constants_get_tag(JClass *class, u2 index) {
+    return class->constants[index].tag;
 }
