@@ -25,12 +25,11 @@ int str_compare_raw(String *s1, char *s2) {
 }
 
 
-JMethod *locate_method(JClass *class) {
+JMethod *cl_find_method(JClass *class, String *name) {
     for(int i=0;i<class->n_methods;i++) {
         int index = class->methods[i].name_index;
-        String main;
-        str_create(&main, "main", 4);
-        if(str_compare(&main, (String *)class->constants[index].value.as.ptr) == 0) {
+
+        if(str_compare(name, (String *)VAL_GET_PTR(class->constants[index].value)) == 0) {
             return &class->methods[i];
         }
     }
@@ -38,18 +37,29 @@ JMethod *locate_method(JClass *class) {
     return NULL;
 }
 
-int jvm_execute_class(JClass *class, Options *options) {
-    // init runtime
-    Runtime runtime;
-    //find main function
-    //runtime_execute_method(&runtime, class->)
+void cf_from_static_method(CallFrame *cf, JMethod *method, CallFrame *parent) {
+    cf->parent = parent;
+    cf->instance = NULL;
+    cf->method = method;
+    cf->ip = cf->method->code.code;
 
+    // setup the stack and local variables
+}
 
+void cf_from_instance_method(CallFrame *cf, JInstance *instance, JMethod *method, CallFrame *parent) {
+    cf->parent = parent;
+    cf->instance = instance;
+    cf->method = method;
+    cf->ip = cf->method->code.code;
+}
+
+int jvm_execute_class(Runtime *runtime, JClass *class, Options *options) {
     /* for now lets do a canned implementation
-       find main, make sure its static
-       ex
+       get static methods working first
     */
-    JMethod *main_method = locate_method(class);
+    String main;
+    str_create(&main, "main", 4);
+    JMethod *main_method = cl_find_method(class, &main);
     if(main_method == NULL) {
         jvm_printf("Cannot find main method\n");
         return -1;
@@ -61,6 +71,19 @@ int jvm_execute_class(JClass *class, Options *options) {
     }
 
     // load the code
+    CallFrame root_cf;
+    cf_from_static_method(&root_cf, main_method, NULL);
+    CallFrame *cf = &root_cf;
+
+    while(1) {
+        switch(*cf->ip) {
+
+        }
+    }
 
 
+    return 0;
+
+    error:
+    return -1;
 }

@@ -32,10 +32,14 @@ typedef struct Value {
         float f;
         double d;
         void *ptr;
-    } as;
+    };
 } Value;
 
-#define VAL_STR(v) ((String *)v.as.ptr)
+#define MKVAL(t, value) (Value){.i = value, .tag = t}
+#define MKPTR(t, value) (Value){.ptr = value, .tag = t}
+#define VAL_GET_TAG(v) ((v).tag)
+#define VAL_GET_PTR(v) ((v).ptr)
+#define VAL_GET_STRING(v) ((String *)v.ptr)
 
 // Constants
 // These are stored as int32 Value type
@@ -188,21 +192,103 @@ typedef struct JClass {
     attribute_info *attributes;
 } JClass;
 
+typedef struct JInstance {
+    JClass *class;
+    //fields
 
-String *jclass_constants_get_string(JClass *class, u2 index);
-cp_tags jclass_constants_get_tag(JClass *class, u2 index);
+} JInstance;
 
+typedef struct CallFrame {
+    struct CallFrame *parent;
+    u1 *ip;
+    u2 sp;
+    // local vars
+    // stack
+    JInstance *instance;
+    JMethod *method;
+} CallFrame;
 
 typedef struct Runtime {
     // cache loaded classes
 
     // some instance of GC
+
+
+    CallFrame *cf;
+
 } Runtime;
 
 typedef struct Options {
 
 } Options;
 
-int jvm_execute_class(JClass *class, Options *options);
+
+void rt_init(Runtime *runtime, Options *options);
+int rt_execute_class(Runtime *runtime, JClass *class, Options *options);
+JClass* rt_get_class(Runtime *runtime, String *name);
+
+
+String *cl_constants_get_string(JClass *class, u2 index);
+cp_tags cl_constants_get_tag(JClass *class, u2 index);
+
+JMethod *cl_find_method(JClass *class, String *name);
+JMethod *instance_find_method(JInstance *instance, String *name);
+int instance_create(JInstance *instance, JClass *class);
+void instance_destroy(JInstance *instance);
+
+void cf_from_static_method(CallFrame *cf, JMethod *method, CallFrame *parent);
+void cf_from_instance_method(CallFrame *cf, JInstance *instance, JMethod *method, CallFrame *parent);
+void cf_stack_push(CallFrame *cf, Value v);
+Value cf_stack_pop(CallFrame *cf);
+
+
+typedef enum Opcode {
+    AALOAD = 50,
+    AASTORE = 83,
+    ACONST_NULL = 1,
+    ALOAD_0 = 42,
+    ALOAD_1 = 43,
+    ALOAD_2 = 44,
+    ALOAD_3 = 45,
+    ANEWARRAY = 189,
+    ARETURN = 176,
+    ARRAYLENGTH = 190,
+    ASTORE = 58,
+    ASTORE_0 = 75,
+    ASTORE_1 = 76,
+    ASTORE_2 = 77,
+    ASTORE_3 = 78,
+    ATHROW = 191,
+    BALOAD = 51,
+    BASTORE = 84,
+    BIPUSH = 16,
+    ICONST_m1 =2,
+    ICONST_0 = 3,
+    ICONST_1 = 4,
+    ICONST_2 = 5,
+    ICONST_3 = 6,
+    ICONST_4 = 7,
+    ICONST_5 = 8,
+    ILOAD = 21,
+    ILOAD_0 = 26,
+    ILOAD_1 = 27,
+    ILOAD_2 = 28,
+    ILOAD_3 = 29,
+    INVOKEDYNAMIC = 186,
+    INVOKESPECIAL = 183,
+    INVOKEVIRTUAL = 182,
+    INVOKESTATIC = 184,
+    MONITORENTER = 194,
+    MONITOREXIT = 195,
+    NEW = 187,
+    NEWARRAY = 188,
+    NOP = 0,
+    POP = 87,
+    POP2 = 88,
+    PUTFIELD = 181,
+    PUTSTATIC = 179,
+    RET = 169,
+    RETURN = 177
+} Opcode;
 
 #endif //TINYJVM_JVM_H

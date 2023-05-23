@@ -16,45 +16,39 @@ int parse_constant(Constant *c, ByteBuf *buf) {
     }u;
     switch(tag) {
         case CONSTANT_Integer:
-            v.tag = INT;
-            v.as.i = (int32_t) bytebuf_readu4(buf);
+            v = MKVAL(INT, bytebuf_readu4(buf));
             break;
         case CONSTANT_Float:
-            v.tag = FLOAT;
-            v.as.f = (float) bytebuf_readu4(buf);
+            v = MKVAL(FLOAT, bytebuf_readu4(buf));
             break;
         case CONSTANT_Long:
-            v.tag = LONG;
-            v.as.l = (int64_t) bytebuf_readu8(buf);
+            v = MKVAL(LONG, bytebuf_readu8(buf));
             break;
         case CONSTANT_Double:
-            v.tag = DOUBLE;
-            v.as.d = (double) bytebuf_readu8(buf);
+            v = MKVAL(DOUBLE, bytebuf_readu8(buf));
             break;
-        case CONSTANT_Utf8:
-            v.tag = STRING;
+        case CONSTANT_Utf8: {
             u2 size = bytebuf_readu2(buf);
             u1 *data = jmalloc(size);
             bytebuf_readbytes(buf, data, size);
             String *str = jmalloc(sizeof(String));
             str_create(str, data, size);
-            v.as.ptr = str;
+            v = MKPTR(STRING, str);
             break;
+        }
 
         case CONSTANT_MethodHandle:
-            v.tag = INT;
             u.ki.kind = bytebuf_read(buf);
             u.ki.index = bytebuf_readu2(buf);
-            v.as.i = u.i;
+            v = MKVAL(INT, u.i);
             break;
         case CONSTANT_String:
         case CONSTANT_MethodType:
         case CONSTANT_Class:
         case CONSTANT_Module:
         case CONSTANT_Package:
-            v.tag = INT;
             u.si.index = bytebuf_readu2(buf);
-            v.as.i = u.i;
+            v = MKVAL(INT, u.i);
             break;
 
         case CONSTANT_Fieldref:
@@ -63,11 +57,10 @@ int parse_constant(Constant *c, ByteBuf *buf) {
         case CONSTANT_NameAndType:
         case CONSTANT_Dynamic:
         case CONSTANT_InvokeDynamic:
-            v.tag = INT;
             u.di.index1 = bytebuf_readu2(buf);
             u.di.index2 = bytebuf_readu2(buf);
-            v.as.i = u.i;
-            break;
+            v = MKVAL(INT, u.i);
+        break;
 
         default:
             jvm_printf("Unrecognized constant type %d\n", tag);
@@ -110,7 +103,7 @@ int _parse_attributes_helper(JClass *cl, ByteBuf *buf, u2 *n, attribute_info **a
     *a = jmalloc(*n * sizeof(*a[0]));
     for(int i=0;i<*n;i++) {
         (*a)->attribute_name_index = bytebuf_readu2(buf);
-        if(jclass_constants_get_tag(cl, (*a)->attribute_name_index) != CONSTANT_Utf8) {
+        if(cl_constants_get_tag(cl, (*a)->attribute_name_index) != CONSTANT_Utf8) {
             jvm_printf("Expected constant tag to be UTF8\n");
             return -1;
         }
@@ -177,7 +170,7 @@ int parse_methods(JClass *cl, ByteBuf *buf) {
         // process attributes
         for(int j=0;j<cl->methods[i].attributes_count;j++) {
             attribute_info a = cl->methods[i].attributes[j];
-            String *name = jclass_constants_get_string(cl, a.attribute_name_index);
+            String *name = cl_constants_get_string(cl, a.attribute_name_index);
             if(str_compare_raw(name, "Code") == 0) {
                 ByteBuf b;
                 bytebuf_create(&b, a.data, a.attribute_length);
@@ -235,9 +228,9 @@ int read_class_from_bytes(JClass *cl, ByteBuf *buf) {
     return 0;
 }
 
-String *jclass_constants_get_string(JClass *class, u2 index) {
-    return class->constants[index].value.as.ptr;
+String *cl_constants_get_string(JClass *class, u2 index) {
+    return VAL_GET_PTR(class->constants[index].value);
 }
-cp_tags jclass_constants_get_tag(JClass *class, u2 index) {
+cp_tags cl_constants_get_tag(JClass *class, u2 index) {
     return class->constants[index].tag;
 }
