@@ -11,6 +11,8 @@
 int jvm_printf(const char *format, ...);
 
 void *jmalloc(size_t n);
+void jfree(void *p);
+void *jrealloc(void *p, size_t n);
 
 typedef struct ByteBuf {
     uint8_t *data;

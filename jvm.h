@@ -13,15 +13,38 @@
 
 typedef struct String {
     u2 size;
+    u2 cap;
     u1 *data;
 } String;
 
+String *str_from_c(char *cstr);
 void str_create(String *str, u1 *data, u2 size);
 int str_compare(String *s1, String *s2);
 int str_compare_raw(String *s1, char *s2);
+String *str_concat(String *s1, String *s2);
+void str_free(String *str);
+int str_ensure_zeropad(String *str);
+char *str_cstr(String *str);
 
-typedef enum ValueType {
-    INT, DOUBLE, STRING, LONG, FLOAT
+
+        typedef enum ValueType {
+    TYPE_VOID,
+    TYPE_NULL,
+    TYPE_BOOL,
+    TYPE_BYTE,
+    TYPE_CHAR,
+    TYPE_SHORT,
+    TYPE_INT,
+    TYPE_DOUBLE,
+    TYPE_STRING,
+    TYPE_LONG,
+    TYPE_FLOAT,
+    TYPE_CLASS,
+    TYPE_INSTANCE,
+    TYPE_EXCEPTION,
+    // Internal only
+    TYPE_METHOD_DESCRIPTOR,
+    TYPE_FIELD_DESCRIPTOR
 } ValueType;
 
 typedef struct Value {
@@ -37,6 +60,8 @@ typedef struct Value {
 
 #define MKVAL(t, value) (Value){.i = value, .tag = t}
 #define MKPTR(t, value) (Value){.ptr = value, .tag = t}
+#define VAL_VOID MKVAL(TYPE_VOID, 0)
+#define VAL_NULL MKVAL(TYPE_NULL, 0)
 #define VAL_GET_TAG(v) ((v).tag)
 #define VAL_GET_PTR(v) ((v).ptr)
 #define VAL_GET_STRING(v) ((String *)v.ptr)
@@ -82,7 +107,12 @@ typedef enum cp_tags {
 
 typedef struct Constant {
     cp_tags tag;
-    Value value;
+    union {
+        Value value;
+        CONSTANT_index_info index_info;
+        CONSTANT_kind_index_info kind_index_info;
+        CONSTANT_double_index_info double_index_info;
+    };
 } Constant;
 
 //all the attribute types
@@ -162,7 +192,23 @@ typedef struct JByteCode {
     attribute_info *attributes;
 } JByteCode;
 
-typedef struct JMethod {
+typedef struct JClass JClass;
+typedef struct JMethod JMethod;
+
+typedef struct FieldType {
+    ValueType type;
+    String class_name;
+} FieldType;
+
+typedef struct JMethodDescriptor {
+    u1 nparams;
+    FieldType return_type;
+    FieldType *field_types;
+
+} JMethodDescriptor;
+
+struct JMethod {
+    JClass *class;
     u2             access_flags;
     u2             name_index;
     u2             descriptor_index;
@@ -170,9 +216,13 @@ typedef struct JMethod {
     attribute_info *attributes;
     // some representation of code
     JByteCode code;
-} JMethod;
+    JMethodDescriptor descriptor;
+    u1 descriptor_cached;
+};
 
-typedef struct JClass {
+struct JClass {
+    JClass *next;
+    String *name;
     u2 major_version;
     u2 minor_version;
     Constant *constants; // 1-indexed
@@ -190,7 +240,7 @@ typedef struct JClass {
 
     u2             n_attributes;
     attribute_info *attributes;
-} JClass;
+};
 
 typedef struct JInstance {
     JClass *class;
@@ -201,14 +251,20 @@ typedef struct JInstance {
 typedef struct CallFrame {
     struct CallFrame *parent;
     u1 *ip;
-    u2 sp;
-    // local vars
-    // stack
+    Value *sp;
+
+    // allocated with alloca()
+    Value *locals;
+    Value *stack;
+
     JInstance *instance;
     JMethod *method;
 } CallFrame;
 
 typedef struct Runtime {
+    JClass *cache;
+    String **classpaths;
+    u2 n_classpaths;
     // cache loaded classes
 
     // some instance of GC
@@ -222,11 +278,16 @@ typedef struct Options {
 
 } Options;
 
+int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf);
+int method_descriptor_free(JMethodDescriptor *d);
 
 void rt_init(Runtime *runtime, Options *options);
 int rt_execute_class(Runtime *runtime, JClass *class, Options *options);
 JClass* rt_get_class(Runtime *runtime, String *name);
-
+int rt_execute_static_method(Runtime *runtime, JMethod *method);
+JMethod *rt_constant_resolve_methodref(Runtime *rt, Constant *constants, u2 index);
+int read_class_from_bytes(JClass *cl, ByteBuf *buf);
+int read_class_from_path(JClass *cl, char *path);
 
 String *cl_constants_get_string(JClass *class, u2 index);
 cp_tags cl_constants_get_tag(JClass *class, u2 index);
@@ -236,16 +297,12 @@ JMethod *instance_find_method(JInstance *instance, String *name);
 int instance_create(JInstance *instance, JClass *class);
 void instance_destroy(JInstance *instance);
 
-void cf_from_static_method(CallFrame *cf, JMethod *method, CallFrame *parent);
-void cf_from_instance_method(CallFrame *cf, JInstance *instance, JMethod *method, CallFrame *parent);
-void cf_stack_push(CallFrame *cf, Value v);
-Value cf_stack_pop(CallFrame *cf);
-
 
 typedef enum Opcode {
     AALOAD = 50,
     AASTORE = 83,
     ACONST_NULL = 1,
+    ALOAD = 25,
     ALOAD_0 = 42,
     ALOAD_1 = 43,
     ALOAD_2 = 44,
@@ -262,13 +319,18 @@ typedef enum Opcode {
     BALOAD = 51,
     BASTORE = 84,
     BIPUSH = 16,
-    ICONST_m1 =2,
+    ICONST_m1 = 2,
     ICONST_0 = 3,
     ICONST_1 = 4,
     ICONST_2 = 5,
     ICONST_3 = 6,
     ICONST_4 = 7,
     ICONST_5 = 8,
+    ISTORE = 54,
+    ISTORE_0 = 59,
+    ISTORE_1 = 60,
+    ISTORE_2 = 61,
+    ISTORE_3 = 62,
     ILOAD = 21,
     ILOAD_0 = 26,
     ILOAD_1 = 27,
@@ -287,8 +349,12 @@ typedef enum Opcode {
     POP2 = 88,
     PUTFIELD = 181,
     PUTSTATIC = 179,
+    GETFIELD = 180,
+    GETSTATIC = 178,
     RET = 169,
-    RETURN = 177
+    RETURN = 177,
+    IRETURN = 172,
+    IADD = 96
 } Opcode;
 
 #endif //TINYJVM_JVM_H

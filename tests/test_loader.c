@@ -6,8 +6,6 @@
 #include "util.h"
 #include <string.h>
 
-int read_class_from_bytes(JClass *cl, ByteBuf *buf);
-
 static int num_tests = 0;
 static int failures = 0;
 
@@ -25,7 +23,7 @@ static int failures = 0;
 #define ASSERT_STR_EQ(exp, act)  \
     do {                      \
     num_tests++;             \
-    if(act->size != strlen(exp) || strncmp(exp, act->data, act->size) != 0) {        \
+    if(act->size != strlen(exp) || strncmp(exp, (char*)act->data, act->size) != 0) {        \
         printf("TEST FAILED: %s\n\t %s:%d EXPECTED %s obtained %s\n", __FUNCTION__, __FILE_NAME__, __LINE__, exp, act->data); \
         failures++;\
     }                         \
@@ -34,7 +32,7 @@ static int failures = 0;
 void test_basic_class() {
     ByteBuf buf;
     JClass class;
-    read_file("tests/data/Basic.class", &buf);
+    read_file("Basic.class", &buf);
     read_class_from_bytes(&class, &buf);
     ASSERT_EQ(27, class.n_constants);
     ASSERT_STR_EQ("<init>", VAL_GET_STRING(class.constants[6].value));
@@ -56,17 +54,18 @@ void test_basic_class() {
     ASSERT_EQ(1, class.methods[1].attributes_count);
 }
 
-void test_execute_basic_class() {
+void test_execute_function_calls_class() {
     ByteBuf buf;
     JClass class;
-    read_file("tests/data/Basic.class", &buf);
+    read_file("FunctionCalls.class", &buf);
     read_class_from_bytes(&class, &buf);
-    //jvm_execute_class(&class, NULL);
+    Runtime runtime;
+    rt_execute_class(&runtime, &class, NULL);
 }
 
 int main() {
     test_basic_class();
-    test_execute_basic_class();
+    test_execute_function_calls_class();
     printf("TESTS RUN: %d FAILURES: %d\n", num_tests, failures);
 
 }

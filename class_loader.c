@@ -1,13 +1,14 @@
 //
 // Created by Haikal Zain on 9/5/2023.
 //
+#include <assert.h>
+#include <sys/fcntl.h>
 #include "jvm.h"
 #include "util.h"
 
 
 int parse_constant(Constant *c, ByteBuf *buf) {
     u1 tag = bytebuf_read(buf);
-    Value v;
     union {
         int32_t i;
         CONSTANT_double_index_info di;
@@ -16,16 +17,16 @@ int parse_constant(Constant *c, ByteBuf *buf) {
     }u;
     switch(tag) {
         case CONSTANT_Integer:
-            v = MKVAL(INT, bytebuf_readu4(buf));
+            c->value = MKVAL(TYPE_INT, bytebuf_readu4(buf));
             break;
         case CONSTANT_Float:
-            v = MKVAL(FLOAT, bytebuf_readu4(buf));
+            c->value = MKVAL(TYPE_FLOAT, bytebuf_readu4(buf));
             break;
         case CONSTANT_Long:
-            v = MKVAL(LONG, bytebuf_readu8(buf));
+            c->value = MKVAL(TYPE_LONG, bytebuf_readu8(buf));
             break;
         case CONSTANT_Double:
-            v = MKVAL(DOUBLE, bytebuf_readu8(buf));
+            c->value = MKVAL(TYPE_DOUBLE, bytebuf_readu8(buf));
             break;
         case CONSTANT_Utf8: {
             u2 size = bytebuf_readu2(buf);
@@ -33,22 +34,20 @@ int parse_constant(Constant *c, ByteBuf *buf) {
             bytebuf_readbytes(buf, data, size);
             String *str = jmalloc(sizeof(String));
             str_create(str, data, size);
-            v = MKPTR(STRING, str);
+            c->value = MKPTR(TYPE_STRING, str);
             break;
         }
 
         case CONSTANT_MethodHandle:
-            u.ki.kind = bytebuf_read(buf);
-            u.ki.index = bytebuf_readu2(buf);
-            v = MKVAL(INT, u.i);
+            c->kind_index_info.kind = bytebuf_read(buf);
+            c->kind_index_info.index = bytebuf_readu2(buf);
             break;
         case CONSTANT_String:
         case CONSTANT_MethodType:
         case CONSTANT_Class:
         case CONSTANT_Module:
         case CONSTANT_Package:
-            u.si.index = bytebuf_readu2(buf);
-            v = MKVAL(INT, u.i);
+            c->index_info.index = bytebuf_readu2(buf);
             break;
 
         case CONSTANT_Fieldref:
@@ -57,9 +56,8 @@ int parse_constant(Constant *c, ByteBuf *buf) {
         case CONSTANT_NameAndType:
         case CONSTANT_Dynamic:
         case CONSTANT_InvokeDynamic:
-            u.di.index1 = bytebuf_readu2(buf);
-            u.di.index2 = bytebuf_readu2(buf);
-            v = MKVAL(INT, u.i);
+            c->double_index_info.index1 = bytebuf_readu2(buf);
+            c->double_index_info.index2 = bytebuf_readu2(buf);
         break;
 
         default:
@@ -67,7 +65,143 @@ int parse_constant(Constant *c, ByteBuf *buf) {
             return -1;
     }
     c->tag = tag;
-    c->value = v;
+    return 0;
+}
+
+int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf) {
+    // BEWARE: the 2 switch blocks are not identical, return type also supports V
+    assert(bytebuf_read(buf) == '(');
+    u1 c;
+    u1 n = 0;
+    u2 l, j;
+    u1 * data;
+    while((c = bytebuf_read(buf)) != ')') {
+        if(n == 255) {
+            return -1;
+        }
+        switch(c) {
+            case 'B':
+            case 'C':
+            case 'D':
+            case 'F':
+            case 'I':
+            case 'J':
+            case 'S':
+            case 'Z':
+                break;
+            case 'L':
+                while(bytebuf_read(buf) != ';');
+                break;
+            case '[':
+                n--;
+                break;
+            default:
+                return -1;
+
+        }
+        n++;
+    }
+
+    buf->off = 1;
+    d->nparams = n;
+    d->field_types = jmalloc(sizeof(d->field_types[0]) * n);
+    for(int i=0;i<n;i++) {
+        c = bytebuf_read(buf);
+        switch(c) {
+            case 'B':
+                d->field_types[i].type = TYPE_BYTE;
+                break;
+            case 'C':
+                d->field_types[i].type = TYPE_CHAR;
+                break;
+            case 'D':
+                d->field_types[i].type = TYPE_DOUBLE;
+                break;
+            case 'F':
+                d->field_types[i].type = TYPE_FLOAT;
+                break;
+            case 'I':
+                d->field_types[i].type = TYPE_INT;
+                break;
+            case 'J':
+                d->field_types[i].type = TYPE_LONG;
+                break;
+            case 'S':
+                d->field_types[i].type = TYPE_SHORT;
+                break;
+            case 'Z':
+                d->field_types[i].type = TYPE_BOOL;
+                break;
+            case 'L':
+                l = 0;
+                while(bytebuf_read(buf) != ';') l++;
+                data = jmalloc(l);
+                j = 0;
+                while((c = bytebuf_read(buf)) != ';') {
+                    data[j++] = c;
+                }
+                d->return_type.type = TYPE_STRING;
+                str_create(&d->return_type.class_name, data, l);
+                break;
+            case '[':
+                return -1;
+                break;
+            default:
+                jfree(d->field_types);
+                return -1;
+
+        }
+    }
+    bytebuf_read(buf);
+    // return type
+    switch(bytebuf_read(buf)) {
+        case 'B':
+            d->return_type.type = TYPE_BYTE;
+            break;
+        case 'C':
+            d->return_type.type = TYPE_CHAR;
+            break;
+        case 'D':
+            d->return_type.type = TYPE_DOUBLE;
+            break;
+        case 'F':
+            d->return_type.type = TYPE_FLOAT;
+            break;
+        case 'I':
+            d->return_type.type = TYPE_INT;
+            break;
+        case 'J':
+            d->return_type.type = TYPE_LONG;
+            break;
+        case 'S':
+            d->return_type.type = TYPE_SHORT;
+            break;
+        case 'Z':
+            d->return_type.type = TYPE_BOOL;
+            break;
+        case 'L':
+            l = 0;
+            while(bytebuf_read(buf) != ';') l++;
+            data = jmalloc(l);
+            j = 0;
+            while((c = bytebuf_read(buf)) != ';') {
+                 data[j++] = c;
+            }
+            d->return_type.type = TYPE_STRING;
+            str_create(&d->return_type.class_name, data, l);
+            break;
+        case '[':
+            return -1;
+            break;
+        case 'V':
+            d->return_type.type = TYPE_VOID;
+            break;
+        default:
+            jfree(d->field_types);
+            return -1;
+
+    }
+    assert(buf->off == buf->size);
     return 0;
 }
 
@@ -85,6 +219,8 @@ int parse_constant_pool(JClass *cl, ByteBuf *buf) {
         }
     }
     // should error (for all parse functions) if passed eof
+
+    // check if each type of constant points to the right type
 
     return 0;
 }
@@ -158,6 +294,9 @@ int parse_methods(JClass *cl, ByteBuf *buf) {
     cl->n_methods = bytebuf_readu2(buf);
     cl->methods = jmalloc(cl->n_methods * sizeof(cl->methods[0]));
     for(int i=0;i<cl->n_methods;i++) {
+        cl->methods[i].class = cl;
+        cl->methods[i].descriptor_cached = 0;
+
         cl->methods[i].access_flags = bytebuf_readu2(buf);
         cl->methods[i].name_index = bytebuf_readu2(buf);
         cl->methods[i].descriptor_index = bytebuf_readu2(buf);
@@ -194,6 +333,8 @@ int parse_attributes(JClass *cl, ByteBuf *buf) {
 
 int read_class_from_bytes(JClass *cl, ByteBuf *buf) {
     // TODO Should verify data after parsing. jmalloc failures should be checked (or panic for now)
+    cl->next = NULL;
+    cl->name = NULL;
     u4 magic = bytebuf_readu4(buf);
     if(magic != 0xcafebabe) return -1;
     cl->minor_version = bytebuf_readu2(buf);
@@ -223,6 +364,20 @@ int read_class_from_bytes(JClass *cl, ByteBuf *buf) {
     }
     if(parse_attributes(cl, buf) == -1) {
         jvm_printf("Error parsing attributes\n");
+        return -1;
+    }
+    return 0;
+}
+
+int read_class_from_path(JClass *cls, char *path) {
+    ByteBuf buf;
+    if(read_file(path, &buf) == -1) {
+        jvm_printf("Could not open %s, check error\n", path);
+        return -1;
+    }
+    if(read_class_from_bytes(cls, &buf) == -1) {
+        jfree(buf.data);
+        jvm_printf("Could not parse class at %s\n", path);
         return -1;
     }
     return 0;

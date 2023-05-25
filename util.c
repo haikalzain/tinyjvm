@@ -21,6 +21,14 @@ void *jmalloc(size_t n) {
     return malloc(n);
 }
 
+void jfree(void *ptr) {
+    free(ptr);
+}
+
+void *jrealloc(void *p, size_t n) {
+    return realloc(p, n);
+}
+
 int read_file(const char *filename, ByteBuf *b) {
     FILE *f = fopen(filename, "rb");
     if(!f) return -1;
