@@ -54,6 +54,12 @@ void test_basic_class() {
     ASSERT_EQ(1, class.methods[1].attributes_count);
 }
 
+void test_load_object_class() {
+    JClass cls;
+    read_class_from_path(&cls, "java/lang/Object.class");
+    ASSERT_EQ(0, cls.super_class);
+}
+
 void test_execute_function_calls_class() {
     ByteBuf buf;
     JClass class;
@@ -64,6 +70,7 @@ void test_execute_function_calls_class() {
 }
 
 int main() {
+    test_load_object_class();
     test_basic_class();
     test_execute_function_calls_class();
     printf("TESTS RUN: %d FAILURES: %d\n", num_tests, failures);

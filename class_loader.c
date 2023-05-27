@@ -238,15 +238,15 @@ int _parse_attributes_helper(JClass *cl, ByteBuf *buf, u2 *n, attribute_info **a
     *n = bytebuf_readu2(buf);
     *a = jmalloc(*n * sizeof(*a[0]));
     for(int i=0;i<*n;i++) {
-        (*a)->attribute_name_index = bytebuf_readu2(buf);
-        if(cl_constants_get_tag(cl, (*a)->attribute_name_index) != CONSTANT_Utf8) {
+        (*a)[i].attribute_name_index = bytebuf_readu2(buf);
+        if(cl_constants_get_tag(cl, (*a)[i].attribute_name_index) != CONSTANT_Utf8) {
             jvm_printf("Expected constant tag to be UTF8\n");
             return -1;
         }
 
-        (*a)->attribute_length = bytebuf_readu4(buf);
-        (*a)->data = jmalloc((*a)->attribute_length);
-        if(bytebuf_readbytes(buf, (*a)->data, (*a)->attribute_length) == -1) {
+        (*a)[i].attribute_length = bytebuf_readu4(buf);
+        (*a)[i].data = jmalloc((*a)[i].attribute_length);
+        if(bytebuf_readbytes(buf, (*a)[i].data, (*a)[i].attribute_length) == -1) {
             return -1;
         }
     }
@@ -299,6 +299,7 @@ int parse_methods(JClass *cl, ByteBuf *buf) {
 
         cl->methods[i].access_flags = bytebuf_readu2(buf);
         cl->methods[i].name_index = bytebuf_readu2(buf);
+        cl->methods[i].name = VAL_GET_STRING(cl->constants[cl->methods[i].name_index].value); // unsafe
         cl->methods[i].descriptor_index = bytebuf_readu2(buf);
         if(_parse_attributes_helper(
                 cl, buf, &cl->methods[i].attributes_count, &cl->methods[i].attributes) == -1) {

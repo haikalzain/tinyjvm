@@ -69,13 +69,17 @@ String *str_from_c(char *cstr) {
 }
 
 
-JMethod *cl_find_method(JClass *class, String *name) {
+JMethod *rt_find_method(Runtime *rt, JClass *class, String *name) {
     for(int i=0;i<class->n_methods;i++) {
-        int index = class->methods[i].name_index;
-
-        if(str_compare(name, (String *)VAL_GET_PTR(class->constants[index].value)) == 0) {
+        if(str_compare(name, class->methods[i].name) == 0) {
             return &class->methods[i];
         }
+    }
+    if(class->super_class != 0) {
+        // can this cause infinite loop?
+        JClass *c = rt_get_class(rt, cl_constants_get_string(class, class->super_class));
+        if(c == NULL) return NULL;
+        return rt_find_method(rt, c, name);
     }
 
     return NULL;
@@ -127,23 +131,29 @@ JClass *rt_get_class(Runtime *rt, String *name) {
     return cls;
 }
 
-// assume that constants have already been verified
-JMethod *rt_constant_resolve_methodref(Runtime *rt, Constant *constants, u2 index) {
-    // check bounds?
-    assert(constants[index].tag == CONSTANT_Methodref);
-    Constant class_constant = constants[constants[index].double_index_info.index1];
-    Constant name_and_type_constant = constants[constants[index].double_index_info.index2];
-    Constant class_str_constant = constants[class_constant.index_info.index];
-    Constant method_constant = constants[name_and_type_constant.double_index_info.index1];
-    Constant type_constant = constants[name_and_type_constant.double_index_info.index2];
-
-
+JClass *rt_constant_resolve_class(Runtime *rt, Constant *constants, u2 index) {
+    assert(constants[index].tag == CONSTANT_Class);
+    Constant class_str_constant = constants[constants[index].index_info.index];
     JClass *cls = rt_get_class(rt, VAL_GET_STRING(class_str_constant.value));
     if(cls == NULL) {
         jvm_printf("Error resolving class");
         return NULL;
     }
-    JMethod *method = cl_find_method(cls, VAL_GET_STRING(method_constant.value));
+    return cls;
+}
+
+// assume that constants have already been verified
+JMethod *rt_constant_resolve_methodref(Runtime *rt, Constant *constants, u2 index) {
+    // check bounds?
+    assert(constants[index].tag == CONSTANT_Methodref);
+    Constant name_and_type_constant = constants[constants[index].double_index_info.index2];
+    Constant method_constant = constants[name_and_type_constant.double_index_info.index1];
+    Constant type_constant = constants[name_and_type_constant.double_index_info.index2];
+
+
+    JClass *cls = rt_constant_resolve_class(rt, constants, constants[index].double_index_info.index1);
+    if(cls == NULL) return NULL;
+    JMethod *method = rt_find_method(rt, cls, VAL_GET_STRING(method_constant.value));
     // assume descriptor is legit
     if(!method->descriptor_cached) {
         ByteBuf buf;
@@ -158,7 +168,29 @@ JMethod *rt_constant_resolve_methodref(Runtime *rt, Constant *constants, u2 inde
     return method;
 }
 
-Value rt_execute_method(Runtime *rt, const JInstance *instance, const JMethod *method, Value *args, u1 nargs) {
+JInstance *instance_create(JClass *cls) {
+    JInstance *ins = jmalloc(sizeof(JInstance));
+    // TODO should probably check that malloc is not null
+    ins->class = cls;
+    ins->fields = jmalloc(sizeof(ins->fields[0]) * cls->n_fields); // 0 indexed?
+    return ins;
+}
+
+void instance_free(JInstance *ins) {
+    jfree(ins->fields);
+    jfree(ins);
+}
+
+int instance_set_field(JInstance *instance, u2 index, Value value) {
+    instance->fields[index] = value;
+    return 0;
+}
+
+Value instance_get_field(JInstance *instance, u2 index) {
+    return instance->fields[index];
+}
+
+Value rt_execute_method(Runtime *rt, const JInstance *this, const JMethod *method, Value *args, u1 nargs) {
     JClass *class = method->class;
     // load the code
     // why do we even need the cf?
@@ -181,11 +213,16 @@ Value rt_execute_method(Runtime *rt, const JInstance *instance, const JMethod *m
     u8 index;
     Constant constant;
     JMethod *m;
-    Value v;
+    Value v, v2;
+    JClass *c;
+    JInstance *ins;
 
     // Need to type check
     while(1) {
         switch(*ip++) {
+            case BIPUSH:
+                *sp++ = MKVAL(TYPE_BYTE, *ip++);
+                break;
             case ICONST_m1:
                 *sp++ = MKVAL(TYPE_INT, -1);
                 break;
@@ -207,50 +244,108 @@ Value rt_execute_method(Runtime *rt, const JInstance *instance, const JMethod *m
             case ICONST_5:
                 *sp++ = MKVAL(TYPE_INT, 5);
                 break;
+            case ASTORE:
             case ISTORE: // TODO should check bounds of index
                 index = *ip++;
                 locals[index] = *(--sp);
                 break;
+            case ASTORE_0:
             case ISTORE_0:
                 locals[0] = *(--sp);
                 break;
+            case ASTORE_1:
             case ISTORE_1:
                 locals[1] = *(--sp);
                 break;
+            case ASTORE_2:
             case ISTORE_2:
                 locals[2] = *(--sp);
                 break;
+            case ASTORE_3:
             case ISTORE_3:
                 locals[3] = *(--sp);
                 break;
-
+            case ALOAD:
             case ILOAD:
                 index = *ip++;
                 *sp++ = locals[index];
                 break;
+            case ALOAD_0:
             case ILOAD_0:
                 *sp++ = locals[0];
                 break;
+            case ALOAD_1:
             case ILOAD_1:
                 *sp++ = locals[1];
                 break;
+            case ALOAD_2:
             case ILOAD_2:
                 *sp++ = locals[2];
                 break;
+            case ALOAD_3:
             case ILOAD_3:
                 *sp++ = locals[3];
+                break;
+            case NEW:
+                index = read_u2(ip);
+                ip += 2;
+                c = rt_constant_resolve_class(rt, class->constants, index);
+                // should check that this isn't an interface/abstract before trying to instantiate
+                assert(c != NULL);
+                ins = instance_create(c);
+                assert(ins != NULL);
+                *sp++ = MKPTR(TYPE_INSTANCE, ins);
                 break;
             case GETSTATIC:
                 index = read_u2(ip);
                 ip += 2;
                 break;
             case GETFIELD:
+                index = read_u2(ip);
+                ip += 2;
+                v = *(--sp);
+                assert(VAL_GET_TAG(v) == TYPE_INSTANCE);
+                ins = VAL_GET_PTR(v);
+
+                // should type check field
+                *sp++ = instance_get_field(ins, index);
                 break;
             case PUTSTATIC:
                 break;
             case PUTFIELD:
+                index = read_u2(ip);
+                ip += 2;
+                v = *(--sp);
+                v2 = *(--sp);
+                assert(VAL_GET_TAG(v2) == TYPE_INSTANCE);
+                ins = VAL_GET_PTR(v2);
+                // should type check field
+                instance_set_field(ins, index, v);
+
                 break;
             case INVOKEVIRTUAL:
+                //break;
+            case INVOKESPECIAL:
+                index = read_u2(ip);
+                ip += 2;
+                m = rt_constant_resolve_methodref(rt, class->constants, index);
+                if(m == NULL) {
+                    jvm_printf("Method resolution failed");
+                    return MKPTR(TYPE_EXCEPTION, NULL);
+                }
+                // subtract number of args
+                sp -= m->descriptor.nparams;
+                // now get object ref
+                v = *(--sp);
+                assert(VAL_GET_TAG(v) == TYPE_INSTANCE);
+                ins = VAL_GET_PTR(v);
+                v = rt_execute_method(rt, ins, m, sp, m->descriptor.nparams + 1);
+                if(VAL_GET_TAG(v) == TYPE_EXCEPTION) {
+                    return v;
+                }
+                if(m->descriptor.return_type.type != TYPE_VOID) {
+                    *sp++ = v;
+                }
                 break;
             case INVOKESTATIC:
                 index = read_u2(ip);
@@ -281,6 +376,11 @@ Value rt_execute_method(Runtime *rt, const JInstance *instance, const JMethod *m
                 sp--;
                 (sp - 1)->i += sp->i;
                 break;
+            case DUP:
+                assert(val_is_comp_type1(v));
+                *sp = *(sp - 1);
+                sp++;
+                break;
             default:
                 jvm_printf("Unimplemented op %d\n", *(ip - 1));
                 abort();
@@ -300,7 +400,7 @@ int rt_execute_class(Runtime *rt, JClass *class, Options *options) {
     rt->classpaths[0] = str_from_c(".");
 
     String *main = str_from_c("main");
-    JMethod *main_method = cl_find_method(class, main);
+    JMethod *main_method = rt_find_method(rt, class, main);
     if(main_method == NULL) {
         jvm_printf("Cannot find main method\n");
         return -1;

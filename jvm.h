@@ -26,8 +26,33 @@ void str_free(String *str);
 int str_ensure_zeropad(String *str);
 char *str_cstr(String *str);
 
+typedef struct RefcountHeader {
+    u4 refcount;
+} RefcountHeader;
 
-        typedef enum ValueType {
+typedef struct GCHeader {
+    u4 refcount;
+    u1 mark;
+} GCHeader;
+
+typedef struct Symbol {
+    RefcountHeader header;
+    String *str;
+    u4 hash;
+} Symbol;
+
+typedef struct SymbolTable {
+    u4 size;
+    u4 cap;
+    Symbol *table;
+} SymbolTable;
+
+Symbol *symbol_get(String *str);
+void symbol_free(Symbol *);
+
+
+
+typedef enum ValueType {
     TYPE_VOID,
     TYPE_NULL,
     TYPE_BOOL,
@@ -65,6 +90,11 @@ typedef struct Value {
 #define VAL_GET_TAG(v) ((v).tag)
 #define VAL_GET_PTR(v) ((v).ptr)
 #define VAL_GET_STRING(v) ((String *)v.ptr)
+
+static inline u1 val_is_comp_type1(Value v) {
+    if(VAL_GET_TAG(v) != TYPE_LONG && VAL_GET_TAG(v) != TYPE_DOUBLE) return 1;
+    return 0;
+}
 
 // Constants
 // These are stored as int32 Value type
@@ -194,6 +224,8 @@ typedef struct JByteCode {
 
 typedef struct JClass JClass;
 typedef struct JMethod JMethod;
+typedef struct JInstance JInstance;
+typedef struct Runtime Runtime;
 
 typedef struct FieldType {
     ValueType type;
@@ -207,6 +239,8 @@ typedef struct JMethodDescriptor {
 
 } JMethodDescriptor;
 
+typedef Value (*JBuiltinFunction)(Runtime *rt, JInstance *ins, Value *args, u1 nargs);
+
 struct JMethod {
     JClass *class;
     u2             access_flags;
@@ -214,9 +248,13 @@ struct JMethod {
     u2             descriptor_index;
     u2             attributes_count;
     attribute_info *attributes;
-    // some representation of code
-    JByteCode code;
+    union {
+        // some representation of code
+        JByteCode code;
+        JBuiltinFunction func; // native function
+    };
     JMethodDescriptor descriptor;
+    String *name;
     u1 descriptor_cached;
 };
 
@@ -242,26 +280,12 @@ struct JClass {
     attribute_info *attributes;
 };
 
-typedef struct JInstance {
+struct JInstance {
     JClass *class;
-    //fields
+    Value *fields;
+};
 
-} JInstance;
-
-typedef struct CallFrame {
-    struct CallFrame *parent;
-    u1 *ip;
-    Value *sp;
-
-    // allocated with alloca()
-    Value *locals;
-    Value *stack;
-
-    JInstance *instance;
-    JMethod *method;
-} CallFrame;
-
-typedef struct Runtime {
+struct Runtime {
     JClass *cache;
     String **classpaths;
     u2 n_classpaths;
@@ -269,10 +293,7 @@ typedef struct Runtime {
 
     // some instance of GC
 
-
-    CallFrame *cf;
-
-} Runtime;
+};
 
 typedef struct Options {
 
@@ -286,16 +307,18 @@ int rt_execute_class(Runtime *runtime, JClass *class, Options *options);
 JClass* rt_get_class(Runtime *runtime, String *name);
 int rt_execute_static_method(Runtime *runtime, JMethod *method);
 JMethod *rt_constant_resolve_methodref(Runtime *rt, Constant *constants, u2 index);
+JClass *rt_constant_resolve_class(Runtime *rt, Constant *constants, u2 index);
 int read_class_from_bytes(JClass *cl, ByteBuf *buf);
 int read_class_from_path(JClass *cl, char *path);
 
 String *cl_constants_get_string(JClass *class, u2 index);
 cp_tags cl_constants_get_tag(JClass *class, u2 index);
 
-JMethod *cl_find_method(JClass *class, String *name);
-JMethod *instance_find_method(JInstance *instance, String *name);
-int instance_create(JInstance *instance, JClass *class);
-void instance_destroy(JInstance *instance);
+JMethod *rt_find_method(Runtime *rt, JClass *class, String *name);
+JInstance *instance_create(JClass *class);
+int instance_set_field(JInstance *instance, u2 index, Value value);
+Value instance_get_field(JInstance *instance, u2 index);
+void instance_free(JInstance *instance);
 
 
 typedef enum Opcode {
@@ -354,7 +377,8 @@ typedef enum Opcode {
     RET = 169,
     RETURN = 177,
     IRETURN = 172,
-    IADD = 96
+    IADD = 96,
+    DUP = 89
 } Opcode;
 
 #endif //TINYJVM_JVM_H

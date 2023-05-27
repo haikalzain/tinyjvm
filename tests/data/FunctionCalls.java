@@ -5,5 +5,7 @@ class FunctionCalls {
 
     public static void main(String[] args) {
         int x = add(2, 4);
+        InstanceMethod y = new InstanceMethod();
+        x = y.add(3, 5);
     }
 }
