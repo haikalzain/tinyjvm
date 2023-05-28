@@ -68,6 +68,16 @@ String *str_from_c(char *cstr) {
     return s;
 }
 
+JField *rt_find_field(Runtime *rt, JInstance *ins, String *name) {
+    // doesn't work on fields in superclass. Need to resolve at class load time
+    for(int i=0;i<ins->class->n_fields;i++) {
+        if(str_compare(name, ins->fields[i].name) == 0) {
+            return &ins->fields[i];
+        }
+    }
+    return NULL;
+}
+
 
 JMethod *rt_find_method(Runtime *rt, JClass *class, String *name) {
     for(int i=0;i<class->n_methods;i++) {
@@ -172,7 +182,12 @@ JInstance *instance_create(JClass *cls) {
     JInstance *ins = jmalloc(sizeof(JInstance));
     // TODO should probably check that malloc is not null
     ins->class = cls;
-    ins->fields = jmalloc(sizeof(ins->fields[0]) * cls->n_fields); // 0 indexed?
+    ins->fields = jmalloc(sizeof(ins->fields[0]) * cls->n_fields);
+    for(int i=0;i<ins->class->n_fields;i++) {
+        JField *field = &ins->fields[i];
+        field->name = cl_constants_get_string(ins->class, ins->class->fields[i].name_index);
+        field->value = VAL_NULL; // what to initialize fields to?
+    }
     return ins;
 }
 
@@ -181,13 +196,23 @@ void instance_free(JInstance *ins) {
     jfree(ins);
 }
 
-int instance_set_field(JInstance *instance, u2 index, Value value) {
-    instance->fields[index] = value;
+int instance_set_field(Runtime *rt, JInstance *instance, u2 index, Value value) {
+    Constant field_ref = instance->class->constants[index];
+    Constant name_and_descriptor = instance->class->constants[field_ref.double_index_info.index2];
+    String *name = cl_constants_get_string(instance->class, name_and_descriptor.double_index_info.index1);
+    JField *field = rt_find_field(rt, instance, name);
+    assert(field != NULL);
+    field->value = value;
     return 0;
 }
 
-Value instance_get_field(JInstance *instance, u2 index) {
-    return instance->fields[index];
+Value instance_get_field(Runtime *rt, JInstance *instance, u2 index) {
+    Constant field_ref = instance->class->constants[index];
+    Constant name_and_descriptor = instance->class->constants[field_ref.double_index_info.index2];
+    String *name = cl_constants_get_string(instance->class, name_and_descriptor.double_index_info.index1);
+    JField *field = rt_find_field(rt, instance, name);
+    assert(field != NULL);
+    return field->value;
 }
 
 Value rt_execute_method(Runtime *rt, const JInstance *this, const JMethod *method, Value *args, u1 nargs) {
@@ -221,7 +246,8 @@ Value rt_execute_method(Runtime *rt, const JInstance *this, const JMethod *metho
     while(1) {
         switch(*ip++) {
             case BIPUSH:
-                *sp++ = MKVAL(TYPE_BYTE, *ip++);
+                // promote to int
+                *sp++ = MKVAL(TYPE_INT, *ip++);
                 break;
             case ICONST_m1:
                 *sp++ = MKVAL(TYPE_INT, -1);
@@ -308,7 +334,7 @@ Value rt_execute_method(Runtime *rt, const JInstance *this, const JMethod *metho
                 ins = VAL_GET_PTR(v);
 
                 // should type check field
-                *sp++ = instance_get_field(ins, index);
+                *sp++ = instance_get_field(rt, ins, index);
                 break;
             case PUTSTATIC:
                 break;
@@ -320,7 +346,7 @@ Value rt_execute_method(Runtime *rt, const JInstance *this, const JMethod *metho
                 assert(VAL_GET_TAG(v2) == TYPE_INSTANCE);
                 ins = VAL_GET_PTR(v2);
                 // should type check field
-                instance_set_field(ins, index, v);
+                instance_set_field(rt, ins, index, v);
 
                 break;
             case INVOKEVIRTUAL:

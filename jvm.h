@@ -199,14 +199,6 @@ typedef enum method_flags {
     METHOD_SYNTHETIC = 0x1000
 } method_flags;
 
-typedef struct method_info {
-    u2             access_flags;
-    u2             name_index;
-    u2             descriptor_index;
-    u2             attributes_count;
-    attribute_info *attributes;
-} method_info;
-
 typedef struct JByteCode {
     u2 max_stack;
     u2 max_locals;
@@ -224,6 +216,7 @@ typedef struct JByteCode {
 
 typedef struct JClass JClass;
 typedef struct JMethod JMethod;
+typedef struct JField JField;
 typedef struct JInstance JInstance;
 typedef struct Runtime Runtime;
 
@@ -240,6 +233,11 @@ typedef struct JMethodDescriptor {
 } JMethodDescriptor;
 
 typedef Value (*JBuiltinFunction)(Runtime *rt, JInstance *ins, Value *args, u1 nargs);
+
+struct JField {
+    String *name;
+    Value value;
+};
 
 struct JMethod {
     JClass *class;
@@ -282,7 +280,7 @@ struct JClass {
 
 struct JInstance {
     JClass *class;
-    Value *fields;
+    JField *fields;
 };
 
 struct Runtime {
@@ -315,9 +313,10 @@ String *cl_constants_get_string(JClass *class, u2 index);
 cp_tags cl_constants_get_tag(JClass *class, u2 index);
 
 JMethod *rt_find_method(Runtime *rt, JClass *class, String *name);
+JField *rt_find_field(Runtime *rt, JInstance *ins, String *name);
 JInstance *instance_create(JClass *class);
-int instance_set_field(JInstance *instance, u2 index, Value value);
-Value instance_get_field(JInstance *instance, u2 index);
+int instance_set_field(Runtime *rt, JInstance *instance, u2 index, Value value);
+Value instance_get_field(Runtime *rt, JInstance *instance, u2 index);
 void instance_free(JInstance *instance);
 
 
