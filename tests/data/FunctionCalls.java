@@ -3,9 +3,10 @@ class FunctionCalls {
         return x + y;
     }
 
-    public static void main(String[] args) {
+    public static int add2() {
         int x = add(2, 4);
         InstanceMethod y = new InstanceMethod();
-        x = y.add(3, 5);
+        x = y.add(x, 5);
+        return x;
     }
 }

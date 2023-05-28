@@ -5,29 +5,10 @@
 #include "../jvm.h"
 #include "util.h"
 #include <string.h>
+#include "test.h"
 
 static int num_tests = 0;
 static int failures = 0;
-
-#define ASSERT_EQ(exp, act)  \
-    do {                      \
-    num_tests++;             \
-    if((exp) != (act)) {        \
-        printf("TEST FAILED: %s\n\t %s:%d EXPECTED %s obtained %s\n", __FUNCTION__, __FILE_NAME__, __LINE__, #exp, #act); \
-        failures++;\
-    }                         \
-    }while(0)
-
-// compare char * and String
-// TODO exp is unsafe since not NULL terminated
-#define ASSERT_STR_EQ(exp, act)  \
-    do {                      \
-    num_tests++;             \
-    if(act->size != strlen(exp) || strncmp(exp, (char*)act->data, act->size) != 0) {        \
-        printf("TEST FAILED: %s\n\t %s:%d EXPECTED %s obtained %s\n", __FUNCTION__, __FILE_NAME__, __LINE__, exp, act->data); \
-        failures++;\
-    }                         \
-    }while(0)
 
 void test_basic_class() {
     ByteBuf buf;
@@ -61,18 +42,28 @@ void test_load_object_class() {
 }
 
 void test_execute_function_calls_class() {
-    ByteBuf buf;
-    JClass class;
-    read_file("FunctionCalls.class", &buf);
-    read_class_from_bytes(&class, &buf);
-    Runtime runtime;
-    rt_execute_class(&runtime, &class, NULL);
+    Runtime rt;
+    rt_init(&rt, NULL);
+    Value v = execute_static_method(&rt, "FunctionCalls", "add2", NULL, 0);
+    ASSERT_EQ(TYPE_INT, VAL_GET_TAG(v));
+    ASSERT_EQ(21, v.i);
 }
+
+void test_static_add() {
+    Runtime rt;
+    rt_init(&rt, NULL);
+    Value args[] = {MKVAL(TYPE_INT, 2), MKVAL(TYPE_INT, 1000)};
+    Value v = execute_static_method(&rt, "FunctionCalls", "add", args, 2);
+    ASSERT_EQ(TYPE_INT, VAL_GET_TAG(v));
+    ASSERT_EQ(1002, v.i);
+}
+
 
 int main() {
     test_load_object_class();
     test_basic_class();
     test_execute_function_calls_class();
+    test_static_add();
     printf("TESTS RUN: %d FAILURES: %d\n", num_tests, failures);
 
 }

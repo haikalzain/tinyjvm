@@ -300,8 +300,9 @@ typedef struct Options {
 int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf);
 int method_descriptor_free(JMethodDescriptor *d);
 
-void rt_init(Runtime *runtime, Options *options);
+int rt_init(Runtime *runtime, Options *options);
 int rt_execute_class(Runtime *runtime, JClass *class, Options *options);
+// gets the class, loads it if not already loaded
 JClass* rt_get_class(Runtime *runtime, String *name);
 int rt_execute_static_method(Runtime *runtime, JMethod *method);
 JMethod *rt_constant_resolve_methodref(Runtime *rt, Constant *constants, u2 index);
@@ -318,6 +319,9 @@ JInstance *instance_create(JClass *class);
 int instance_set_field(Runtime *rt, JInstance *instance, u2 index, Value value);
 Value instance_get_field(Runtime *rt, JInstance *instance, u2 index);
 void instance_free(JInstance *instance);
+
+// can execute any static method
+Value execute_static_method(Runtime *rt, char *class_name, char *method_name, Value *args, u2 nargs);
 
 
 typedef enum Opcode {

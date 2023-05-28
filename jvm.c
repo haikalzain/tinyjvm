@@ -100,7 +100,7 @@ static inline u2 read_u2(const uint8_t *ip) {
     return ret;
 }
 
-JClass *rt_load_class(Runtime *rt, String *name) {
+JClass *_rt_load_class(Runtime *rt, String *name) {
     for(u2 i=0;i<rt->n_classpaths;i++) {
         String *slash = str_from_c("/");
         String *class = str_from_c(".class");
@@ -135,7 +135,7 @@ JClass *rt_get_class(Runtime *rt, String *name) {
         }
     }
 
-    cls = rt_load_class(rt, name);
+    cls = _rt_load_class(rt, name);
     cls->next = rt->cache;
     rt->cache = cls;
     return cls;
@@ -418,30 +418,27 @@ Value rt_execute_method(Runtime *rt, const JInstance *this, const JMethod *metho
     return MKPTR(TYPE_EXCEPTION, NULL);
 }
 
-int rt_execute_class(Runtime *rt, JClass *class, Options *options) {
-    // this is wrong somehow - should create rt_init
+int rt_init(Runtime *rt, Options *options) {
     rt->cache = NULL;
     rt->n_classpaths = 1;
     rt->classpaths = jmalloc(sizeof(rt->classpaths[0]) * rt->n_classpaths);
     rt->classpaths[0] = str_from_c(".");
-
-    String *main = str_from_c("main");
-    JMethod *main_method = rt_find_method(rt, class, main);
-    if(main_method == NULL) {
-        jvm_printf("Cannot find main method\n");
-        return -1;
-    }
-    if(main_method->access_flags != (METHOD_PUBLIC | METHOD_STATIC)) {
-        jvm_printf("Main class has invalid access flags");
-        // check return type and params as well
-        return -1;
-    }
-    Value args[] = {MKPTR(TYPE_CLASS, class)};
-    Value ret = rt_execute_method(rt, NULL, main_method, args, 1);
-    if(VAL_GET_TAG(ret) == TYPE_EXCEPTION) {
-        jvm_printf("Exception");
-        return -1;
-    }
-
     return 0;
+}
+
+Value execute_static_method(Runtime *rt, char *cls_name, char *method_name, Value *args, u2 nargs) {
+    String *cls_str = str_from_c(cls_name);
+    String *method_str = str_from_c(method_name);
+    JClass *cls = rt_get_class(rt, cls_str);
+    if(cls == NULL) {
+        return MKVAL(TYPE_EXCEPTION, 0);
+    }
+    JMethod *m = rt_find_method(rt, cls, method_str);
+    if(m == NULL) {
+        return MKVAL(TYPE_EXCEPTION, 0);
+    }
+    Value v = rt_execute_method(rt, NULL, m, args, nargs);
+    str_free(cls_str);
+    str_free(method_str);
+    return v;
 }
