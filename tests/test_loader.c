@@ -49,6 +49,14 @@ void test_execute_function_calls_class() {
     ASSERT_EQ(21, v.i);
 }
 
+void test_execute_native_basic_class() {
+    Runtime rt;
+    rt_init(&rt, NULL);
+    Value v = execute_static_method(&rt, "NativeBasic", "main", NULL, 0);
+    //ASSERT_EQ(TYPE_INT, VAL_GET_TAG(v));
+    //ASSERT_EQ(21, v.i);
+}
+
 void test_static_add() {
     Runtime rt;
     rt_init(&rt, NULL);
@@ -63,6 +71,7 @@ int main() {
     test_load_object_class();
     test_basic_class();
     test_execute_function_calls_class();
+    test_execute_native_basic_class();
     test_static_add();
     printf("TESTS RUN: %d FAILURES: %d\n", num_tests, failures);
 

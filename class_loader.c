@@ -136,6 +136,7 @@ int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf) {
                 l = 0;
                 while(bytebuf_read(buf) != ';') l++;
                 data = jmalloc(l);
+                buf->off -= l + 1;
                 j = 0;
                 while((c = bytebuf_read(buf)) != ';') {
                     data[j++] = c;
@@ -184,6 +185,7 @@ int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf) {
             while(bytebuf_read(buf) != ';') l++;
             data = jmalloc(l);
             j = 0;
+            buf->off -= l + 1;
             while((c = bytebuf_read(buf)) != ';') {
                  data[j++] = c;
             }

@@ -8,66 +8,6 @@
 #include "jvm.h"
 #include "list.h"
 
-void str_create(String *str, u1 *data, u2 size) {
-    str->data = data;
-    str->size = size;
-    str->cap = size;
-}
-
-int str_compare(String *s1, String *s2) {
-    if(s1->size != s2->size) return -1;
-    return memcmp(s1->data, s2->data, s1->size);
-}
-
-int str_compare_raw(String *s1, char *s2) {
-    if(s1->size != strlen(s2)) return -1;
-    return memcmp(s1->data, s2, s1->size);
-}
-
-String *str_concat(String *s1, String *s2) {
-    u1 *data = jmalloc(s1->size + s2->size);
-    if(data == NULL) return NULL;
-    memcpy(data, s1->data, s1->size);
-    memcpy(data + s1->size, s2->data, s2->size);
-    String *str = jmalloc(sizeof(String));
-    str_create(str, data, s1->size + s2->size);
-    return str;
-}
-
-void str_free(String *str) {
-    jfree(str->data);
-    jfree(str);
-}
-
-int str_ensure_zeropad(String *str) {
-    if(str->cap > str->size) return 0;
-    str->cap = str->size + 1;
-    u1 *tmp = jrealloc(str->data, str->cap);
-    if(tmp == NULL) {
-        jvm_printf("OOM");
-        return -1;
-    }
-    str->data = tmp;
-    str->data[str->size] = 0;
-    return 0;
-}
-
-char *str_cstr(String *str) {
-    if(str_ensure_zeropad(str) == -1) {
-        return NULL;
-    }
-    return (char *)str->data;
-}
-
-String *str_from_c(char *cstr) {
-    String *s = jmalloc(sizeof(String));
-    s->data = jmalloc(strlen(cstr));
-    if(s == NULL || s->data == NULL) return NULL;
-    memcpy(s->data, cstr, strlen(cstr));
-    str_create(s, s->data, strlen(cstr));
-    return s;
-}
-
 JField *rt_find_field(Runtime *rt, JInstance *ins, String *name) {
     // doesn't work on fields in superclass. Need to resolve at class load time
     for(int i=0;i<ins->class->n_fields;i++) {
@@ -215,7 +155,8 @@ Value instance_get_field(Runtime *rt, JInstance *instance, u2 index) {
     return field->value;
 }
 
-Value rt_execute_method(Runtime *rt, const JInstance *this, const JMethod *method, Value *args, u1 nargs) {
+
+Value rt_execute_java_method(Runtime *rt, const JInstance *this, const JMethod *method, Value *args, u1 nargs) {
     JClass *class = method->class;
     // load the code
     // why do we even need the cf?
@@ -407,6 +348,13 @@ Value rt_execute_method(Runtime *rt, const JInstance *this, const JMethod *metho
                 *sp = *(sp - 1);
                 sp++;
                 break;
+            case POP:
+                sp--;
+                break;
+            case POP2: // type2 takes only 1 slot in our impl
+                sp--;
+                if(val_is_comp_type1(*sp)) sp--;
+                break;
             default:
                 jvm_printf("Unimplemented op %d\n", *(ip - 1));
                 abort();
@@ -418,11 +366,22 @@ Value rt_execute_method(Runtime *rt, const JInstance *this, const JMethod *metho
     return MKPTR(TYPE_EXCEPTION, NULL);
 }
 
+Value rt_execute_method(Runtime *rt, const JInstance *this, const JMethod *method, Value *args, u1 nargs) {
+    if(method->access_flags & METHOD_NATIVE) {
+        void *native_method = native_libs_find_method(&rt->native_libs, method->class->name, method->name);
+        return native_method_invoke(native_method, &rt->env, args, nargs);
+    }
+
+    return rt_execute_java_method(rt, this, method, args, nargs);
+}
+
 int rt_init(Runtime *rt, Options *options) {
     rt->cache = NULL;
     rt->n_classpaths = 1;
     rt->classpaths = jmalloc(sizeof(rt->classpaths[0]) * rt->n_classpaths);
     rt->classpaths[0] = str_from_c(".");
+    native_libs_init(&rt->native_libs);
+    native_libs_load(&rt->native_libs, "/usr/local/lib/tinyjvm/libjava.dylib");
     return 0;
 }
 
@@ -437,7 +396,7 @@ Value execute_static_method(Runtime *rt, char *cls_name, char *method_name, Valu
     if(m == NULL) {
         return MKVAL(TYPE_EXCEPTION, 0);
     }
-    Value v = rt_execute_method(rt, NULL, m, args, nargs);
+    Value v = rt_execute_java_method(rt, NULL, m, args, nargs);
     str_free(cls_str);
     str_free(method_str);
     return v;
