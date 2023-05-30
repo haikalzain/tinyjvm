@@ -11,7 +11,40 @@ install(TARGETS java LIBRARY DESTINATION lib/tinyjvm)
 add_library(native_test SHARED tests/data/native_test/NativeBasic.c)
 install(TARGETS native_test LIBRARY DESTINATION lib/tinyjvm)
 
-add_executable(test_loader jvm.h util.c class_loader.c util.h tests/test_loader.c jvm.c class_loader.h list.c list.h native.c native.h tests/test.h include/jni.h string.c string.h)
+add_executable(test_loader
+        jvm.h
+        util.c
+        class_loader.c
+        util.h
+        tests/test_loader.c
+        jvm.c
+        class_loader.h
+        list.c
+        list.h
+        native.c
+        native.h
+        tests/test.h
+        include/jni.h
+        string.c
+        string.h)
+
+add_executable(test_interpreter
+        jvm.h
+        util.c
+        class_loader.c
+        util.h
+        jvm.c
+        class_loader.h
+        list.c
+        list.h
+        native.c
+        native.h
+        tests/test.h
+        include/jni.h
+        string.c
+        string.h
+        tests/test_interpreter.c)
+add_dependencies(test_interpreter java_lib)
 #add_executable(tinyjvm jvm.h util.c class_loader.c util.h tests/test_loader.c)
 
 target_compile_options(test_loader PRIVATE -fsanitize=address)

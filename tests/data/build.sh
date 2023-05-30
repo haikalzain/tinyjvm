@@ -1,4 +1,4 @@
-javac -target 11 Basic.java
+javac -target 11 Exceptions.java
 javac -target 11 FunctionCalls.java
 javac -target 11 SelfInitialize.java
 javac -target 11 NativeBasic.java

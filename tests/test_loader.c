@@ -47,13 +47,7 @@ void test_load_object_class() {
     ASSERT_EQ(0, cls.super_class);
 }
 
-void test_execute_function_calls_class() {
-    Runtime rt;
-    rt_init(&rt, NULL);
-    Value v = execute_static_method(&rt, "FunctionCalls", "add2", NULL, 0);
-    ASSERT_EQ(TYPE_INT, VAL_GET_TAG(v));
-    ASSERT_EQ(21, v.i);
-}
+
 
 void test_execute_native_basic_class() {
     Runtime rt;
@@ -101,6 +95,6 @@ int main() {
     test_execute_function_calls_class();
     test_execute_native_basic_class();
     test_static_add();
-    printf("TESTS RUN: %d FAILURES: %d\n", num_tests, failures);
+    PRINT_STATS();
 
 }

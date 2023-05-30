@@ -15,4 +15,8 @@ public class SelfInitialize {
         System.out.println(SelfInitialize.x);
     }
 
+    public static int test() {
+        return SelfInitialize.x;
+    }
+
 }

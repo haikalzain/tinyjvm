@@ -5,6 +5,8 @@
 #ifndef TINYJVM_TEST_H
 #define TINYJVM_TEST_H
 
+#include <stdio.h>
+
 #define ASSERT_EQ(exp, act)  \
     do {                      \
     num_tests++;             \
@@ -34,5 +36,7 @@
         failures++;\
     }                         \
     }while(0)
+
+#define PRINT_STATS() printf("TESTS RUN: %d FAILURES: %d\n", num_tests, failures)
 
 #endif //TINYJVM_TEST_H
