@@ -78,6 +78,7 @@ Value native_method_invoke(void *method, ValueType return_type, JNIEnv *env, Val
     // we are playing loose with void * here
     // also dangerous to return a Value from void return type. should return VAL_VOID
     // if more than a certain number of args, need an asm shim
+    // floating points don't work due to function call convention requiring two arguments.
     // TODO make sure that instance, class is handled correctly
     Value ret;
     switch(nargs) {

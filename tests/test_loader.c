@@ -65,17 +65,23 @@ void test_execute_native_basic_class() {
 
 void test_execute_native_add() {
     Runtime rt;
+    Value v;
 
     rt_init(&rt, &options_native_test);
     Value int_args[] = {MKVAL(TYPE_INT, 200), MKVAL(TYPE_INT, 500)};
-    Value v = execute_static_method(&rt, "NativeBasic", "addInt", int_args, 2);
+    v = execute_static_method(&rt, "NativeBasic", "addInt", int_args, 2);
     ASSERT_EQ(TYPE_INT, VAL_GET_TAG(v));
     ASSERT_EQ(700, v.i);
 
-    Value float_args[] = {MKVAL(TYPE_FLOAT, 200.3), MKVAL(TYPE_FLOAT, 2.75)};
+    Value float_args[] = {MKFLOAT(200.3), MKFLOAT(2.75)};
     Value v2 = execute_static_method(&rt, "NativeBasic", "addFloat", float_args, 2);
     ASSERT_EQ(TYPE_FLOAT, VAL_GET_TAG(v2));
     ASSERT_FLOAT_EQ(203.05, v2.f);
+
+    Value double_args[] = {MKFLOAT(200.3), MKFLOAT(2.75)};
+    Value v3 = execute_static_method(&rt, "NativeBasic", "addDouble", double_args, 2);
+    ASSERT_EQ(TYPE_DOUBLE, VAL_GET_TAG(v3));
+    ASSERT_FLOAT_EQ(203.05, v3.d);
 }
 
 void test_static_add() {

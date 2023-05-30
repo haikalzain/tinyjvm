@@ -85,6 +85,7 @@ typedef struct Value {
 
 #define MKVAL(t, value) (Value){.i = value, .tag = t}
 #define MKPTR(t, value) (Value){.ptr = value, .tag = t}
+#define MKFLOAT(value) (Value) {.d = value, .tag = TYPE_FLOAT}
 #define VAL_VOID MKVAL(TYPE_VOID, 0)
 #define VAL_NULL MKVAL(TYPE_NULL, 0)
 #define VAL_GET_TAG(v) ((v).tag)
