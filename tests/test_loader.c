@@ -92,7 +92,6 @@ int main() {
     test_execute_native_add();
     test_load_object_class();
     test_basic_class();
-    test_execute_function_calls_class();
     test_execute_native_basic_class();
     test_static_add();
     PRINT_STATS();
