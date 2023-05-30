@@ -2,7 +2,6 @@
 // Created by Haikal Zain on 9/5/2023.
 //
 #include <assert.h>
-#include <sys/fcntl.h>
 #include "jvm.h"
 #include "util.h"
 
@@ -214,7 +213,7 @@ int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf) {
     return 0;
 }
 
-int parse_constant_pool(JClass *cl, ByteBuf *buf) {
+int parse_constant_pool(ClassFile *cl, ByteBuf *buf) {
     cl->n_constants = bytebuf_readu2(buf);
     cl->constants = (Constant *)jmalloc(cl->n_constants * sizeof(Constant));
     // need to set cl->constants[0]
@@ -234,7 +233,7 @@ int parse_constant_pool(JClass *cl, ByteBuf *buf) {
     return 0;
 }
 
-int parse_interfaces(JClass *cl, ByteBuf *buf) {
+int parse_interfaces(ClassFile *cl, ByteBuf *buf) {
     cl->n_interfaces = bytebuf_readu2(buf);
     cl->interfaces = jmalloc(cl->n_interfaces * sizeof(cl->interfaces[0]));
     for(int i=0;i<cl->n_interfaces;i++) {
@@ -243,12 +242,12 @@ int parse_interfaces(JClass *cl, ByteBuf *buf) {
     return 0;
 }
 
-int _parse_attributes_helper(JClass *cl, ByteBuf *buf, u2 *n, attribute_info **a) {
+int _parse_attributes_helper(ClassFile *cl, ByteBuf *buf, u2 *n, attribute_info **a) {
     *n = bytebuf_readu2(buf);
     *a = jmalloc(*n * sizeof(*a[0]));
     for(int i=0;i<*n;i++) {
         (*a)[i].attribute_name_index = bytebuf_readu2(buf);
-        if(cl_constants_get_tag(cl, (*a)[i].attribute_name_index) != CONSTANT_Utf8) {
+        if(cf_constants_get_tag(cl, (*a)[i].attribute_name_index) != CONSTANT_Utf8) {
             jvm_printf("Expected constant tag to be UTF8\n");
             return -1;
         }
@@ -262,7 +261,7 @@ int _parse_attributes_helper(JClass *cl, ByteBuf *buf, u2 *n, attribute_info **a
     return 0;
 }
 
-int parse_fields(JClass *cl, ByteBuf *buf) {
+int parse_fields(ClassFile *cl, ByteBuf *buf) {
     cl->n_fields = bytebuf_readu2(buf);
     cl->fields = jmalloc(cl->n_fields * sizeof(cl->fields[0]));
     for(int i=0;i<cl->n_fields;i++) {
@@ -299,49 +298,23 @@ int parse_code_attribute(JByteCode *code, ByteBuf *buf) {
     return 0;
 }
 
-int parse_methods(JClass *cl, ByteBuf *buf) {
+int parse_methods(ClassFile *cl, ByteBuf *buf) {
     cl->n_methods = bytebuf_readu2(buf);
     cl->methods = jmalloc(cl->n_methods * sizeof(cl->methods[0]));
     for(int i=0;i<cl->n_methods;i++) {
-        cl->methods[i].class = cl;
-
         cl->methods[i].access_flags = bytebuf_readu2(buf);
         cl->methods[i].name_index = bytebuf_readu2(buf);
-        cl->methods[i].name = VAL_GET_STRING(cl->constants[cl->methods[i].name_index].value); // unsafe
         cl->methods[i].descriptor_index = bytebuf_readu2(buf);
         if(_parse_attributes_helper(
                 cl, buf, &cl->methods[i].attributes_count, &cl->methods[i].attributes) == -1) {
             jvm_printf("Error parsing method attributes\n");
             return -1;
         }
-
-        // method descriptor
-        ByteBuf buf2;
-        String *descriptor_str = cl_constants_get_string(cl, cl->methods[i].descriptor_index);
-        bytebuf_create(&buf2, descriptor_str->data, descriptor_str->size);
-        if(parse_method_descriptor(&cl->methods[i].descriptor, &buf2) == -1) {
-            // cleanup
-            jvm_printf("Error parsing method descriptor\n");
-            return -1;
-        }
-
-        // process attributes
-        for(int j=0;j<cl->methods[i].attributes_count;j++) {
-            attribute_info a = cl->methods[i].attributes[j];
-            String *name = cl_constants_get_string(cl, a.attribute_name_index);
-            if(str_compare_raw(name, "Code") == 0) {
-                ByteBuf b;
-                bytebuf_create(&b, a.data, a.attribute_length);
-                if(parse_code_attribute(&cl->methods[i].code, &b) == -1) {
-                    return -1;
-                }
-            }
-        }
     }
     return 0;
 }
 
-int parse_attributes(JClass *cl, ByteBuf *buf) {
+int parse_attributes(ClassFile *cl, ByteBuf *buf) {
     if(_parse_attributes_helper(
             cl, buf, &cl->n_attributes, &cl->attributes) == -1) {
         jvm_printf("Error parsing attributes\n");
@@ -350,40 +323,38 @@ int parse_attributes(JClass *cl, ByteBuf *buf) {
     return 0;
 }
 
-int read_class_from_bytes(JClass *cl, ByteBuf *buf) {
+int read_classfile_from_bytes(ClassFile *cl, ByteBuf *buf) {
     // TODO Should verify data after parsing. jmalloc failures should be checked (or panic for now)
-    cl->next = NULL;
-    cl->name = NULL;
     u4 magic = bytebuf_readu4(buf);
     if(magic != 0xcafebabe) return -1;
     cl->minor_version = bytebuf_readu2(buf);
     cl->major_version = bytebuf_readu2(buf);
     if(cl->major_version > 55) {
-        jvm_printf("Unsupported major version %d\n", cl->major_version);
-        return -1;
+    jvm_printf("Unsupported major version %d\n", cl->major_version);
+    return -1;
     }
     if(parse_constant_pool(cl, buf) == -1) {
-        jvm_printf("Error parsing constant pool\n");
-        return -1;
+    jvm_printf("Error parsing constant pool\n");
+    return -1;
     }
     cl->access_flags = bytebuf_readu2(buf);
     cl->this_class = bytebuf_readu2(buf);
     cl->super_class = bytebuf_readu2(buf);
     if(parse_interfaces(cl, buf) == -1) {
-        jvm_printf("Error parsing interfaces\n");
-        return -1;
+    jvm_printf("Error parsing interfaces\n");
+    return -1;
     }
     if(parse_fields(cl, buf) == -1) {
-        jvm_printf("Error parsing fields\n");
-        return -1;
+    jvm_printf("Error parsing fields\n");
+    return -1;
     }
     if(parse_methods(cl, buf) == -1) {
-        jvm_printf("Error parsing methods\n");
-        return -1;
+    jvm_printf("Error parsing methods\n");
+    return -1;
     }
     if(parse_attributes(cl, buf) == -1) {
-        jvm_printf("Error parsing attributes\n");
-        return -1;
+    jvm_printf("Error parsing attributes\n");
+    return -1;
     }
     return 0;
 }
@@ -406,6 +377,88 @@ String *cl_constants_get_string(JClass *class, u2 index) {
     assert(class->constants[index].tag == CONSTANT_Utf8);
     return VAL_GET_PTR(class->constants[index].value);
 }
-cp_tags cl_constants_get_tag(JClass *class, u2 index) {
+
+String *cf_constants_get_string(ClassFile *class, u2 index) {
+    assert(class->constants[index].tag == CONSTANT_Utf8);
+    return VAL_GET_PTR(class->constants[index].value);
+}
+
+cp_tags cf_constants_get_tag(ClassFile *class, u2 index) {
     return class->constants[index].tag;
+}
+
+int process_methods(JClass *cl, ClassFile *cf) {
+    cl->methods = jmalloc(sizeof(cl->methods[0]) * cf->n_methods);
+    cl->n_methods = cf->n_methods;
+    for(int i=0;i<cl->n_methods;i++) {
+        cl->methods[i].class = cl;
+        cl->methods[i].access_flags = cf->methods[i].access_flags;
+        cl->methods[i].name = cf_constants_get_string(cf, cf->methods[i].name_index);
+
+        // method descriptor
+        ByteBuf buf2;
+        String *descriptor_str = cf_constants_get_string(cf, cf->methods[i].descriptor_index);
+        bytebuf_create(&buf2, descriptor_str->data, descriptor_str->size);
+        if(parse_method_descriptor(&cl->methods[i].descriptor, &buf2) == -1) {
+            // cleanup
+            jvm_printf("Error parsing method descriptor\n");
+            return -1;
+        }
+
+        // process attributes
+        for(int j=0;j<cf->methods[i].attributes_count;j++) {
+            attribute_info a = cf->methods[i].attributes[j];
+            String *name = cf_constants_get_string(cf, a.attribute_name_index);
+            if(str_compare_raw(name, "Code") == 0) {
+                ByteBuf b;
+                bytebuf_create(&b, a.data, a.attribute_length);
+                if(parse_code_attribute(&cl->methods[i].code, &b) == -1) {
+                    return -1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+int process_classfile(JClass *cl, ClassFile *cf) {
+    cl->next = NULL;
+    cl->name = NULL;
+    cl->cf = cf;
+    cl->status = CLASS_LOADING;
+
+    cl->minor_version = cf->minor_version;
+    cl->major_version = cf->major_version;
+    cl->access_flags = cf->access_flags;
+
+    cl->this_class = cf->this_class;
+    cl->super_class = cf->super_class;
+
+    cl->n_constants = cf->n_constants;
+    cl->constants = cf->constants;
+
+
+    // should process this correctly
+    cl->n_fields = cf->n_fields;
+    cl->fields = cf->fields;
+
+    if(process_methods(cl, cf) != 0) {
+        return -1;
+    }
+
+    // should process fields here
+    return 0;
+
+}
+
+int read_class_from_bytes(JClass *cl, ByteBuf *buf) {
+    ClassFile cf;
+    if(read_classfile_from_bytes(&cf, buf) == -1) {
+        jvm_printf("Failed to read classfile\n");
+        return -1;
+    }
+    if(process_classfile(cl, &cf) == -1) {
+        jvm_printf("Failed to process classfile\n");
+    }
+    return 0;
 }

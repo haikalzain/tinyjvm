@@ -18,9 +18,9 @@ Options options_native_test = {
 
 void test_basic_class() {
     ByteBuf buf;
-    JClass class;
+    ClassFile class;
     read_file("Basic.class", &buf);
-    read_class_from_bytes(&class, &buf);
+    read_classfile_from_bytes(&class, &buf);
     ASSERT_EQ(27, class.n_constants);
     ASSERT_STR_EQ("<init>", VAL_GET_STRING(class.constants[6].value));
     ASSERT_STR_EQ("([Ljava/lang/String;)V", VAL_GET_STRING(class.constants[11].value));

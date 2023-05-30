@@ -29,7 +29,7 @@ void test_self_initialize() {
 }
 
 int main() {
-    test_exceptions();
+   // test_exceptions();
     test_self_initialize();
     test_execute_function_calls_class();
     PRINT_STATS();

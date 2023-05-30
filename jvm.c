@@ -52,6 +52,9 @@ JClass *_rt_load_class(Runtime *rt, String *name) {
         if(cls == NULL) return NULL;
         int ret = read_class_from_path(cls, str_cstr(filename));
 
+        // all class fields should be init to 0
+
+
         str_free(slash);
         str_free(class);
         str_free(path);
@@ -78,6 +81,22 @@ JClass *rt_get_class(Runtime *rt, String *name) {
     cls = _rt_load_class(rt, name);
     cls->next = rt->cache;
     rt->cache = cls;
+
+    // clinit if not already done
+    if(cls->status == CLASS_LOADING) {
+        cls->status = CLASS_INITING;
+        String *clinit_str = str_from_c("<clinit>");
+        JMethod *clinit = rt_find_method(rt, cls, clinit_str);
+        if (clinit != NULL) {
+            Value v = rt_execute_method(rt, NULL, clinit, NULL, 0);
+            if (v.tag == TYPE_EXCEPTION) {
+                jvm_printf("Exception occurred in <clinit>\n");
+                return NULL;
+            }
+        }
+        str_free(clinit_str);
+        cls->status = CLASS_LOADED;
+    }
     return cls;
 }
 
