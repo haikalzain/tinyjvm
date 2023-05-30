@@ -106,6 +106,8 @@ int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf) {
     d->nparams = n;
     d->field_types = jmalloc(sizeof(d->field_types[0]) * n);
     for(int i=0;i<n;i++) {
+        // skip array for now
+        param_start:
         c = bytebuf_read(buf);
         switch(c) {
             case 'B':
@@ -141,10 +143,11 @@ int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf) {
                 while((c = bytebuf_read(buf)) != ';') {
                     data[j++] = c;
                 }
-                d->return_type.type = TYPE_STRING;
+                d->return_type.type = TYPE_INSTANCE;
                 str_create(&d->return_type.class_name, data, l);
                 break;
             case '[':
+                goto param_start;
                 return -1;
                 break;
             default:
@@ -154,6 +157,9 @@ int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf) {
         }
     }
     bytebuf_read(buf);
+
+    // skip array for now
+    return_start:
     // return type
     switch(bytebuf_read(buf)) {
         case 'B':
@@ -189,10 +195,11 @@ int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf) {
             while((c = bytebuf_read(buf)) != ';') {
                  data[j++] = c;
             }
-            d->return_type.type = TYPE_STRING;
+            d->return_type.type = TYPE_INSTANCE;
             str_create(&d->return_type.class_name, data, l);
             break;
         case '[':
+            goto return_start;
             return -1;
             break;
         case 'V':
@@ -297,7 +304,6 @@ int parse_methods(JClass *cl, ByteBuf *buf) {
     cl->methods = jmalloc(cl->n_methods * sizeof(cl->methods[0]));
     for(int i=0;i<cl->n_methods;i++) {
         cl->methods[i].class = cl;
-        cl->methods[i].descriptor_cached = 0;
 
         cl->methods[i].access_flags = bytebuf_readu2(buf);
         cl->methods[i].name_index = bytebuf_readu2(buf);
@@ -306,6 +312,16 @@ int parse_methods(JClass *cl, ByteBuf *buf) {
         if(_parse_attributes_helper(
                 cl, buf, &cl->methods[i].attributes_count, &cl->methods[i].attributes) == -1) {
             jvm_printf("Error parsing method attributes\n");
+            return -1;
+        }
+
+        // method descriptor
+        ByteBuf buf2;
+        String *descriptor_str = cl_constants_get_string(cl, cl->methods[i].descriptor_index);
+        bytebuf_create(&buf2, descriptor_str->data, descriptor_str->size);
+        if(parse_method_descriptor(&cl->methods[i].descriptor, &buf2) == -1) {
+            // cleanup
+            jvm_printf("Error parsing method descriptor\n");
             return -1;
         }
 
@@ -387,6 +403,7 @@ int read_class_from_path(JClass *cls, char *path) {
 }
 
 String *cl_constants_get_string(JClass *class, u2 index) {
+    assert(class->constants[index].tag == CONSTANT_Utf8);
     return VAL_GET_PTR(class->constants[index].value);
 }
 cp_tags cl_constants_get_tag(JClass *class, u2 index) {

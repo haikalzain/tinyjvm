@@ -5,8 +5,11 @@ set(CMAKE_C_STANDARD 99)
 
 include_directories(include)
 add_library(java SHARED libjava/Object.c)
-
 install(TARGETS java LIBRARY DESTINATION lib/tinyjvm)
+
+
+add_library(native_test SHARED tests/data/native_test/NativeBasic.c)
+install(TARGETS native_test LIBRARY DESTINATION lib/tinyjvm)
 
 add_executable(test_loader jvm.h util.c class_loader.c util.h tests/test_loader.c jvm.c class_loader.h list.c list.h native.c native.h tests/test.h include/jni.h string.c string.h)
 #add_executable(tinyjvm jvm.h util.c class_loader.c util.h tests/test_loader.c)

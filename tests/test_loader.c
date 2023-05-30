@@ -10,6 +10,12 @@
 static int num_tests = 0;
 static int failures = 0;
 
+char *test_native_libs[] = {"/usr/local/lib/tinyjvm/libnative_test.dylib"};
+Options options_native_test = {
+        .native_libs = test_native_libs,
+        .n_native_libs = 1
+};
+
 void test_basic_class() {
     ByteBuf buf;
     JClass class;
@@ -57,6 +63,21 @@ void test_execute_native_basic_class() {
     //ASSERT_EQ(21, v.i);
 }
 
+void test_execute_native_add() {
+    Runtime rt;
+
+    rt_init(&rt, &options_native_test);
+    Value int_args[] = {MKVAL(TYPE_INT, 200), MKVAL(TYPE_INT, 500)};
+    Value v = execute_static_method(&rt, "NativeBasic", "addInt", int_args, 2);
+    ASSERT_EQ(TYPE_INT, VAL_GET_TAG(v));
+    ASSERT_EQ(700, v.i);
+
+    Value float_args[] = {MKVAL(TYPE_FLOAT, 200.3), MKVAL(TYPE_FLOAT, 2.75)};
+    Value v2 = execute_static_method(&rt, "NativeBasic", "addFloat", float_args, 2);
+    ASSERT_EQ(TYPE_FLOAT, VAL_GET_TAG(v2));
+    ASSERT_FLOAT_EQ(203.05, v2.f);
+}
+
 void test_static_add() {
     Runtime rt;
     rt_init(&rt, NULL);
@@ -68,6 +89,7 @@ void test_static_add() {
 
 
 int main() {
+    test_execute_native_add();
     test_load_object_class();
     test_basic_class();
     test_execute_function_calls_class();

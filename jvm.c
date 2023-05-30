@@ -27,7 +27,7 @@ JMethod *rt_find_method(Runtime *rt, JClass *class, String *name) {
     }
     if(class->super_class != 0) {
         // can this cause infinite loop?
-        JClass *c = rt_get_class(rt, cl_constants_get_string(class, class->super_class));
+        JClass *c = rt_constant_resolve_class(rt, class->constants, class->super_class);
         if(c == NULL) return NULL;
         return rt_find_method(rt, c, name);
     }
@@ -59,7 +59,7 @@ JClass *_rt_load_class(Runtime *rt, String *name) {
         str_free(filename);
 
         if(ret == 0) {
-            cls->name = name;
+            cls->name = str_dup(name);
             return cls;
         }
     }
@@ -98,23 +98,11 @@ JMethod *rt_constant_resolve_methodref(Runtime *rt, Constant *constants, u2 inde
     assert(constants[index].tag == CONSTANT_Methodref);
     Constant name_and_type_constant = constants[constants[index].double_index_info.index2];
     Constant method_constant = constants[name_and_type_constant.double_index_info.index1];
-    Constant type_constant = constants[name_and_type_constant.double_index_info.index2];
-
 
     JClass *cls = rt_constant_resolve_class(rt, constants, constants[index].double_index_info.index1);
     if(cls == NULL) return NULL;
     JMethod *method = rt_find_method(rt, cls, VAL_GET_STRING(method_constant.value));
-    // assume descriptor is legit
-    if(!method->descriptor_cached) {
-        ByteBuf buf;
-        String *descriptor_str = VAL_GET_STRING(type_constant.value);
-        bytebuf_create(&buf, descriptor_str->data, descriptor_str->size);
-        if(parse_method_descriptor(&method->descriptor, &buf) == -1) {
-            // cleanup
-            return NULL;
-        }
-        method->descriptor_cached = 1;
-    }
+
     return method;
 }
 
@@ -369,7 +357,10 @@ Value rt_execute_java_method(Runtime *rt, const JInstance *this, const JMethod *
 Value rt_execute_method(Runtime *rt, const JInstance *this, const JMethod *method, Value *args, u1 nargs) {
     if(method->access_flags & METHOD_NATIVE) {
         void *native_method = native_libs_find_method(&rt->native_libs, method->class->name, method->name);
-        return native_method_invoke(native_method, &rt->env, args, nargs);
+        if(native_method == NULL) {
+            return MKVAL(TYPE_EXCEPTION, 0);
+        }
+        return native_method_invoke(native_method, method->descriptor.return_type.type, &rt->env, args, nargs);
     }
 
     return rt_execute_java_method(rt, this, method, args, nargs);
@@ -382,6 +373,11 @@ int rt_init(Runtime *rt, Options *options) {
     rt->classpaths[0] = str_from_c(".");
     native_libs_init(&rt->native_libs);
     native_libs_load(&rt->native_libs, "/usr/local/lib/tinyjvm/libjava.dylib");
+    if(options != NULL) {
+        for (int i = 0; i < options->n_native_libs; i++) {
+            native_libs_load(&rt->native_libs, options->native_libs[i]);
+        }
+    }
     return 0;
 }
 
@@ -396,7 +392,7 @@ Value execute_static_method(Runtime *rt, char *cls_name, char *method_name, Valu
     if(m == NULL) {
         return MKVAL(TYPE_EXCEPTION, 0);
     }
-    Value v = rt_execute_java_method(rt, NULL, m, args, nargs);
+    Value v = rt_execute_method(rt, NULL, m, args, nargs);
     str_free(cls_str);
     str_free(method_str);
     return v;

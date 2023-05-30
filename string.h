@@ -15,6 +15,7 @@ typedef struct String {
 
 String *str_from_c(char *cstr);
 void str_create(String *str, u1 *data, u2 size);
+String *str_dup(String *str);
 int str_compare(String *s1, String *s2);
 int str_compare_raw(String *s1, char *s2);
 String *str_concat(String *s1, String *s2);

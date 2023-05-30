@@ -20,6 +20,7 @@ typedef struct NativeLibs {
 void native_libs_init(NativeLibs *native_libs);
 int native_libs_load(NativeLibs *native_libs, char *path);
 void *native_libs_find_method(NativeLibs *native_libs, String *cls, String *method);
-Value native_method_invoke(void *method, JNIEnv *env, Value *args, u1 nargs);
+Value native_method_invoke(
+        void *method, ValueType return_type, JNIEnv *env, Value *args, u1 nargs);
 
 #endif //TINYJVM_NATIVE_H

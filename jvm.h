@@ -170,7 +170,6 @@ struct JMethod {
     };
     JMethodDescriptor descriptor;
     String *name;
-    u1 descriptor_cached;
 };
 
 struct JClass {
@@ -213,7 +212,8 @@ struct Runtime {
 };
 
 typedef struct Options {
-
+    char **native_libs;
+    int n_native_libs;
 } Options;
 
 int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf);

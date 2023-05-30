@@ -12,6 +12,14 @@ void str_create(String *str, u1 *data, u2 size) {
     str->cap = size;
 }
 
+String *str_dup(String *str) {
+    String *new_str = jmalloc(sizeof(String));
+    u1 *data = jmalloc(str->size);
+    memcpy(data, str->data, str->size);
+    str_create(new_str, data, str->size);
+    return new_str;
+}
+
 int str_compare(String *s1, String *s2) {
     if(s1->size != s2->size) return -1;
     return memcmp(s1->data, s2->data, s1->size);

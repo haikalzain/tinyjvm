@@ -65,39 +65,44 @@ void *native_libs_find_method(NativeLibs *native_libs, String *cls, String *meth
     return NULL;
 }
 
-typedef Value (*_invoke1)(JNIEnv *env, Value v1);
-typedef Value (*_invoke2)(JNIEnv *env, Value v1, Value v2);
-typedef Value (*_invoke3)(JNIEnv *env, Value v1, Value v2, Value v3);
-typedef Value (*_invoke4)(JNIEnv *env, Value v1, Value v2, Value v3, Value v4);
-typedef Value (*_invoke5)(JNIEnv *env, Value v1, Value v2, Value v3, Value v4, Value v5);
-typedef Value (*_invoke6)(JNIEnv *env, Value v1, Value v2, Value v3, Value v4, Value v5, Value v6);
-typedef Value (*_invoke7)(JNIEnv *env, Value v1, Value v2, Value v3, Value v4, Value v5, Value v6, Value v7);
-typedef Value (*_invoke8)(JNIEnv *env, Value v1, Value v2, Value v3, Value v4, Value v5, Value v6, Value v7, Value v8);
+typedef void * (*_invoke1)(JNIEnv *env, void * v1);
+typedef void * (*_invoke2)(JNIEnv *env, void * v1, void * v2);
+typedef void * (*_invoke3)(JNIEnv *env, void * v1, void * v2, void * v3);
+typedef void * (*_invoke4)(JNIEnv *env, void * v1, void * v2, void * v3, void * v4);
+typedef void * (*_invoke5)(JNIEnv *env, void * v1, void * v2, void * v3, void * v4, void * v5);
+typedef void * (*_invoke6)(JNIEnv *env, void * v1, void * v2, void * v3, void * v4, void * v5, void * v6);
+typedef void * (*_invoke7)(JNIEnv *env, void * v1, void * v2, void * v3, void * v4, void * v5, void * v6, void * v7);
+typedef void * (*_invoke8)(JNIEnv *env, void * v1, void * v2, void * v3, void * v4, void * v5, void * v6, void * v7, void * v8);
 
-Value native_method_invoke(void *method, JNIEnv *env, Value *args, u1 nargs) {
+Value native_method_invoke(void *method, ValueType return_type, JNIEnv *env, Value *args, u1 nargs) {
     // we are playing loose with void * here
     // also dangerous to return a Value from void return type. should return VAL_VOID
     // if more than a certain number of args, need an asm shim
+    // TODO make sure that instance, class is handled correctly
+    Value ret;
     switch(nargs) {
         case 1:
-            return ((_invoke1)method)(env, args[0]);
+            ret.ptr = ((_invoke1)method)(env, args[0].ptr); break;
         case 2:
-            return ((_invoke2)method)(env, args[0], args[1]);
+            ret.ptr = ((_invoke2)method)(env, args[0].ptr, args[1].ptr); break;
         case 3:
-            return ((_invoke3)method)(env, args[0], args[1], args[2]);
+            ret.ptr = ((_invoke3)method)(env, args[0].ptr, args[1].ptr, args[2].ptr); break;
         case 4:
-            return ((_invoke4)method)(env, args[0], args[1], args[2], args[3]);
+            ret.ptr = ((_invoke4)method)(env, args[0].ptr, args[1].ptr, args[2].ptr, args[3].ptr); break;
         case 5:
-            return ((_invoke5)method)(env, args[0], args[1], args[2], args[3], args[4]);
+            ret.ptr = ((_invoke5)method)(env, args[0].ptr, args[1].ptr, args[2].ptr, args[3].ptr, args[4].ptr); break;
         case 6:
-            return ((_invoke6)method)(env, args[0], args[1], args[2], args[3], args[4], args[5]);
+            ret.ptr = ((_invoke6)method)(env, args[0].ptr, args[1].ptr, args[2].ptr, args[3].ptr, args[4].ptr, args[5].ptr); break;
         case 7:
-            return ((_invoke7)method)(env, args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+            ret.ptr = ((_invoke7)method)(env, args[0].ptr, args[1].ptr, args[2].ptr, args[3].ptr, args[4].ptr, args[5].ptr, args[6].ptr); break;
         case 8:
-            return ((_invoke8)method)(env, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
+            ret.ptr = ((_invoke8)method)(env, args[0].ptr, args[1].ptr, args[2].ptr, args[3].ptr, args[4].ptr, args[5].ptr, args[6].ptr, args[7].ptr); break;
         default:
             jvm_printf("Invalid args %d\n", nargs);
             return MKPTR(TYPE_EXCEPTION, NULL);
     }
+    // unsafe
+    ret.tag = return_type;
+    return ret;
 }
 
