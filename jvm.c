@@ -111,6 +111,20 @@ JClass *rt_constant_resolve_class(Runtime *rt, Constant *constants, u2 index) {
     return cls;
 }
 
+int rt_constant_resolve_fieldtype(FieldType *type, Constant *constants, u2 index) {
+    assert(constants[index].tag == CONSTANT_Class);
+    Constant class_str_constant = constants[constants[index].index_info.index];
+    ByteBuf buf;
+    String *str = VAL_GET_STRING(class_str_constant.value);
+    bytebuf_create(&buf, str->data, str->size);
+
+    if(parse_field_type(type, &buf) == -1) {
+        jvm_printf("Error parsing field type");
+        return -1;
+    }
+    return 0;
+}
+
 // assume that constants have already been verified
 JMethod *rt_constant_resolve_methodref(Runtime *rt, Constant *constants, u2 index) {
     // check bounds?
@@ -141,6 +155,36 @@ JInstance *instance_create(JClass *cls) {
 void instance_free(JInstance *ins) {
     jfree(ins->fields);
     jfree(ins);
+}
+
+JArray *array_create(u4 length, FieldType type) {
+    assert(type.dim == 1);
+    JArray *arr = jmalloc(sizeof(JArray));
+    arr->type = type;
+    arr->length = length;
+    arr->data = jmalloc(sizeof(arr->data[0]) * length);
+    for(u4 i=0;i<arr->length;i++) {
+        arr->data[i].tag = type.type;
+        val_zero(&arr->data[i]);
+    }
+    return arr;
+}
+
+// horribly inefficient
+JArray *multiarray_create(Value *lengths, int n_lengths, FieldType type) {
+    assert(n_lengths > 0);
+    if(n_lengths == 1) {
+        return array_create(lengths[0].i, type);
+    }
+    JArray *arr = jmalloc(sizeof(JArray));
+    arr->type = type;
+    arr->length = lengths[0].i;
+    arr->data = jmalloc(sizeof(arr->data[0]) * lengths[0].i);
+    type.dim--;
+    for(int i=0;i<lengths[0].i;i++) {
+        arr->data[i] = MKPTR(TYPE_ARRAY, multiarray_create(lengths + 1, n_lengths - 1, type));
+    }
+    return arr;
 }
 
 int instance_set_field(Runtime *rt, JInstance *instance, u2 index, Value value) {
@@ -189,6 +233,9 @@ Value rt_execute_java_method(Runtime *rt, const JInstance *this, const JMethod *
     Value v, v2;
     JClass *c;
     JInstance *ins;
+    FieldType field_type;
+    int x;
+    JArray *arr;
 
     // Need to type check
     while(1) {
@@ -361,6 +408,46 @@ Value rt_execute_java_method(Runtime *rt, const JInstance *this, const JMethod *
             case POP2: // type2 takes only 1 slot in our impl
                 sp--;
                 if(val_is_comp_type1(*sp)) sp--;
+                break;
+            case NEWARRAY:
+                field_type.type = *ip++;
+                field_type.dim = 1;
+                assert(VAL_GET_TAG(*(sp - 1)) == TYPE_INT);
+                *(sp - 1) = MKPTR(TYPE_ARRAY, array_create((sp - 1)->i, field_type));
+                break;
+            case ANEWARRAY:
+                index = read_u2(ip);
+                ip += 2;
+                rt_constant_resolve_fieldtype(&field_type, class->constants, index);
+                *(sp - 1) = MKPTR(TYPE_ARRAY, array_create((sp - 1)->i, field_type));
+                break;
+            case MULTINEWARRAY:
+                index = read_u2(ip);
+                ip += 2;
+                x = *ip++;
+                rt_constant_resolve_fieldtype(&field_type, class->constants, index);
+                arr = multiarray_create( sp - x, x, field_type);
+                sp -= x;
+                *sp++ = MKPTR(TYPE_ARRAY, arr);
+                break;
+            case IALOAD:
+            case AALOAD:
+                sp--;
+                index = sp->i;
+                assert(VAL_GET_TAG(*(sp - 1)) == TYPE_ARRAY);
+                arr = VAL_GET_PTR(*(sp - 1));
+                *(sp - 1) = arr->data[index];
+                break;
+            case AASTORE:
+            case IASTORE:
+                sp--;
+                v = *sp;
+                sp--;
+                index = sp->i;
+                assert(VAL_GET_TAG(*(sp - 1)) == TYPE_ARRAY);
+                arr = VAL_GET_PTR(*(sp - 1));
+                arr->data[index] = v;
+                sp--;
                 break;
             default:
                 jvm_printf("Unimplemented op %d\n", *(ip - 1));

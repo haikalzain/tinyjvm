@@ -73,3 +73,23 @@ String *str_from_c(char *cstr) {
     str_create(s, s->data, strlen(cstr));
     return s;
 }
+
+void val_zero(Value *v) {
+    switch(v->tag) {
+        case TYPE_BOOL:
+        case TYPE_BYTE:
+        case TYPE_CHAR:
+        case TYPE_INT:
+        case TYPE_LONG:
+        case TYPE_SHORT:
+            v->l = 0;
+            break;
+        case TYPE_DOUBLE:
+        case TYPE_FLOAT:
+            v->f = 0;
+            break;
+
+        default:
+            *v = VAL_NULL;
+    }
+}

@@ -53,23 +53,24 @@ void symbol_free(Symbol *);
 
 
 typedef enum ValueType {
-    TYPE_VOID,
-    TYPE_NULL,
-    TYPE_BOOL,
-    TYPE_BYTE,
-    TYPE_CHAR,
-    TYPE_SHORT,
-    TYPE_INT,
-    TYPE_DOUBLE,
-    TYPE_STRING,
-    TYPE_LONG,
-    TYPE_FLOAT,
-    TYPE_CLASS,
-    TYPE_INSTANCE,
-    TYPE_EXCEPTION,
+    TYPE_VOID = 101,
+    TYPE_NULL = 100,
+    TYPE_BOOL = 4,
+    TYPE_BYTE = 8,
+    TYPE_CHAR = 5,
+    TYPE_SHORT = 9,
+    TYPE_INT = 10,
+    TYPE_DOUBLE = 7,
+    TYPE_STRING = -1,
+    TYPE_LONG = 11,
+    TYPE_FLOAT = 6,
+    TYPE_CLASS = -2,
+    TYPE_INSTANCE = -3,
+    TYPE_EXCEPTION = -4,
+    TYPE_ARRAY = -5,
     // Internal only
-    TYPE_METHOD_DESCRIPTOR,
-    TYPE_FIELD_DESCRIPTOR
+    TYPE_METHOD_DESCRIPTOR = -6,
+    TYPE_FIELD_DESCRIPTOR = -7
 } ValueType;
 
 typedef struct Value {
@@ -96,5 +97,7 @@ static inline u1 val_is_comp_type1(Value v) {
     if(VAL_GET_TAG(v) != TYPE_LONG && VAL_GET_TAG(v) != TYPE_DOUBLE) return 1;
     return 0;
 }
+
+void val_zero(Value *v);
 
 #endif //TINYJVM_STRING_H

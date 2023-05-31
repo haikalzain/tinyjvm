@@ -29,10 +29,12 @@ typedef struct JMethod JMethod;
 typedef struct JField JField;
 typedef struct JInstance JInstance;
 typedef struct Runtime Runtime;
+typedef struct JArray JArray;
 
 typedef struct FieldType {
     ValueType type;
     String class_name;
+    u1 dim; // array type iff != 0
 } FieldType;
 
 typedef struct JMethodDescriptor {
@@ -94,6 +96,13 @@ struct JInstance {
     JField *fields;
 };
 
+struct JArray {
+    // no need to store value type
+    FieldType type;
+    u4 length;
+    Value *data;
+};
+
 struct Runtime {
     JClass *cache;
     String **classpaths;
@@ -112,13 +121,18 @@ typedef struct Options {
 } Options;
 
 int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf);
+int parse_field_type(FieldType *fieldType, ByteBuf *buf);
 int method_descriptor_free(JMethodDescriptor *d);
+
+JArray *array_create(u4 length, FieldType type);
+JArray *multiarray_create(Value *lengths, int n_lengths, FieldType type);
 
 int rt_init(Runtime *runtime, Options *options);
 int rt_execute_class(Runtime *runtime, JClass *class, Options *options);
 // gets the class, loads it if not already loaded
 JClass* rt_get_class(Runtime *runtime, String *name);
 JMethod *rt_constant_resolve_methodref(Runtime *rt, Constant *constants, u2 index);
+int rt_constant_resolve_fieldtype(FieldType *type, Constant *constants, u2 index);
 JClass *rt_constant_resolve_class(Runtime *rt, Constant *constants, u2 index);
 int read_class_from_bytes(JClass *cl, ByteBuf *buf);
 int read_class_from_path(JClass *cl, char *path);
@@ -195,7 +209,10 @@ typedef enum Opcode {
     RETURN = 177,
     IRETURN = 172,
     IADD = 96,
-    DUP = 89
+    DUP = 89,
+    MULTINEWARRAY = 197,
+    IASTORE = 79,
+    IALOAD = 46,
 } Opcode;
 
 #endif //TINYJVM_JVM_H

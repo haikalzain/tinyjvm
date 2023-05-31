@@ -67,6 +67,63 @@ int parse_constant(Constant *c, ByteBuf *buf) {
     return 0;
 }
 
+int parse_field_type(FieldType *field_type, ByteBuf *buf) {
+    u1 c = bytebuf_read(buf);
+    u1 *data;
+    u1 n = 0;
+    u2 l, j;
+    field_type->dim = 0;
+    while(c == '[') {
+        field_type->dim++;
+        c = bytebuf_read(buf);
+    }
+    switch(c) {
+        case 'B':
+            field_type->type = TYPE_BYTE;
+            break;
+        case 'C':
+            field_type->type = TYPE_CHAR;
+            break;
+        case 'D':
+            field_type->type = TYPE_DOUBLE;
+            break;
+        case 'F':
+            field_type->type = TYPE_FLOAT;
+            break;
+        case 'I':
+            field_type->type = TYPE_INT;
+            break;
+        case 'J':
+            field_type->type = TYPE_LONG;
+            break;
+        case 'S':
+            field_type->type = TYPE_SHORT;
+            break;
+        case 'Z':
+            field_type->type = TYPE_BOOL;
+            break;
+        case 'L':
+            l = 0;
+            while(bytebuf_read(buf) != ';') l++;
+            data = jmalloc(l);
+            j = 0;
+            buf->off -= l + 1;
+            while((c = bytebuf_read(buf)) != ';') {
+                data[j++] = c;
+            }
+            field_type->type = TYPE_INSTANCE;
+            str_create(&field_type->class_name, data, l);
+            break;
+        case 'V':
+            field_type->type = TYPE_VOID;
+            break;
+        default:
+            return -1;
+
+    }
+    return 0;
+}
+
 int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf) {
     // BEWARE: the 2 switch blocks are not identical, return type also supports V
     assert(bytebuf_read(buf) == '(');
@@ -105,109 +162,17 @@ int parse_method_descriptor(JMethodDescriptor *d, ByteBuf *buf) {
     d->nparams = n;
     d->field_types = jmalloc(sizeof(d->field_types[0]) * n);
     for(int i=0;i<n;i++) {
-        // skip array for now
-        param_start:
-        c = bytebuf_read(buf);
-        switch(c) {
-            case 'B':
-                d->field_types[i].type = TYPE_BYTE;
-                break;
-            case 'C':
-                d->field_types[i].type = TYPE_CHAR;
-                break;
-            case 'D':
-                d->field_types[i].type = TYPE_DOUBLE;
-                break;
-            case 'F':
-                d->field_types[i].type = TYPE_FLOAT;
-                break;
-            case 'I':
-                d->field_types[i].type = TYPE_INT;
-                break;
-            case 'J':
-                d->field_types[i].type = TYPE_LONG;
-                break;
-            case 'S':
-                d->field_types[i].type = TYPE_SHORT;
-                break;
-            case 'Z':
-                d->field_types[i].type = TYPE_BOOL;
-                break;
-            case 'L':
-                l = 0;
-                while(bytebuf_read(buf) != ';') l++;
-                data = jmalloc(l);
-                buf->off -= l + 1;
-                j = 0;
-                while((c = bytebuf_read(buf)) != ';') {
-                    data[j++] = c;
-                }
-                d->return_type.type = TYPE_INSTANCE;
-                str_create(&d->return_type.class_name, data, l);
-                break;
-            case '[':
-                goto param_start;
-                return -1;
-                break;
-            default:
-                jfree(d->field_types);
-                return -1;
-
+        // should reject if void
+        if(parse_field_type(&d->field_types[i], buf) == -1) {
+            jfree(d->field_types);
+            return -1;
         }
     }
     bytebuf_read(buf);
 
-    // skip array for now
-    return_start:
     // return type
-    switch(bytebuf_read(buf)) {
-        case 'B':
-            d->return_type.type = TYPE_BYTE;
-            break;
-        case 'C':
-            d->return_type.type = TYPE_CHAR;
-            break;
-        case 'D':
-            d->return_type.type = TYPE_DOUBLE;
-            break;
-        case 'F':
-            d->return_type.type = TYPE_FLOAT;
-            break;
-        case 'I':
-            d->return_type.type = TYPE_INT;
-            break;
-        case 'J':
-            d->return_type.type = TYPE_LONG;
-            break;
-        case 'S':
-            d->return_type.type = TYPE_SHORT;
-            break;
-        case 'Z':
-            d->return_type.type = TYPE_BOOL;
-            break;
-        case 'L':
-            l = 0;
-            while(bytebuf_read(buf) != ';') l++;
-            data = jmalloc(l);
-            j = 0;
-            buf->off -= l + 1;
-            while((c = bytebuf_read(buf)) != ';') {
-                 data[j++] = c;
-            }
-            d->return_type.type = TYPE_INSTANCE;
-            str_create(&d->return_type.class_name, data, l);
-            break;
-        case '[':
-            goto return_start;
-            return -1;
-            break;
-        case 'V':
-            d->return_type.type = TYPE_VOID;
-            break;
-        default:
-            jfree(d->field_types);
-            return -1;
-
+    if(parse_field_type(&d->return_type, buf) == -1) {
+        return -1;
     }
     assert(buf->off == buf->size);
     return 0;
