@@ -19,6 +19,9 @@ typedef struct JByteCode {
     u4 code_length;
     u1 *code;
 
+    u2 exception_table_length;
+    exception_entry *exception_table;
+
 } JByteCode;
 
 typedef struct JClass JClass;

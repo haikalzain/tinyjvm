@@ -242,16 +242,11 @@ int parse_interfaces(ClassFile *cl, ByteBuf *buf) {
     return 0;
 }
 
-int _parse_attributes_helper(ClassFile *cl, ByteBuf *buf, u2 *n, attribute_info **a) {
+int _parse_attributes_helper(ByteBuf *buf, u2 *n, attribute_info **a) {
     *n = bytebuf_readu2(buf);
     *a = jmalloc(*n * sizeof(*a[0]));
     for(int i=0;i<*n;i++) {
         (*a)[i].attribute_name_index = bytebuf_readu2(buf);
-        if(cf_constants_get_tag(cl, (*a)[i].attribute_name_index) != CONSTANT_Utf8) {
-            jvm_printf("Expected constant tag to be UTF8\n");
-            return -1;
-        }
-
         (*a)[i].attribute_length = bytebuf_readu4(buf);
         (*a)[i].data = jmalloc((*a)[i].attribute_length);
         if(bytebuf_readbytes(buf, (*a)[i].data, (*a)[i].attribute_length) == -1) {
@@ -269,7 +264,7 @@ int parse_fields(ClassFile *cl, ByteBuf *buf) {
         cl->fields[i].name_index = bytebuf_readu2(buf);
         cl->fields[i].descriptor_index = bytebuf_readu2(buf);
         if(_parse_attributes_helper(
-                cl, buf, &cl->fields[i].attributes_count, &cl->fields->attributes) == -1) {
+                buf, &cl->fields[i].attributes_count, &cl->fields->attributes) == -1) {
             jvm_printf("Error parsing field attributes\n");
             return -1;
         }
@@ -277,7 +272,7 @@ int parse_fields(ClassFile *cl, ByteBuf *buf) {
     return 0;
 }
 
-int parse_code_attribute(JByteCode *code, ByteBuf *buf) {
+int parse_code_attribute(Code_attribute *code, ByteBuf *buf) {
     code->max_stack = bytebuf_readu2(buf);
     code->max_locals = bytebuf_readu2(buf);
     code->code_length = bytebuf_readu4(buf);
@@ -285,16 +280,20 @@ int parse_code_attribute(JByteCode *code, ByteBuf *buf) {
     if(bytebuf_readbytes(buf, code->code, code->code_length) == -1) {
         return -1;
     }
-    /*
-     * u2 exception_table_length;
-    {   u2 start_pc;
-        u2 end_pc;
-        u2 handler_pc;
-        u2 catch_type;
-    } exception_table[exception_table_length];
-    u2 attributes_count;
-    attribute_info attributes[attributes_count];
-     */
+    code->exception_table_length = bytebuf_readu2(buf);
+    code->exception_table = jmalloc(code->exception_table_length * sizeof(code->exception_table[0]));
+    for(int i=0;i<code->exception_table_length;i++) {
+        code->exception_table->start_pc = bytebuf_readu2(buf);
+        code->exception_table->end_pc = bytebuf_readu2(buf);
+        code->exception_table->handler_pc = bytebuf_readu2(buf);
+        code->exception_table->catch_type = bytebuf_readu2(buf);
+
+    }
+    if(_parse_attributes_helper(buf, &code->attributes_count, &code->attributes) == -1) {
+        jvm_printf("Failed to parse Code attributes\n");
+        return -1;
+    }
+
     return 0;
 }
 
@@ -306,17 +305,32 @@ int parse_methods(ClassFile *cl, ByteBuf *buf) {
         cl->methods[i].name_index = bytebuf_readu2(buf);
         cl->methods[i].descriptor_index = bytebuf_readu2(buf);
         if(_parse_attributes_helper(
-                cl, buf, &cl->methods[i].attributes_count, &cl->methods[i].attributes) == -1) {
+                buf, &cl->methods[i].attributes_count, &cl->methods[i].attributes) == -1) {
             jvm_printf("Error parsing method attributes\n");
             return -1;
         }
+
+        // get named attributes
+        // process attributes
+        for(int j=0;j<cl->methods[i].attributes_count;j++) {
+            attribute_info a = cl->methods[i].attributes[j];
+            String *name = cf_constants_get_string(cl, a.attribute_name_index);
+            if(str_compare_raw(name, "Code") == 0) {
+                ByteBuf b;
+                bytebuf_create(&b, a.data, a.attribute_length);
+                if(parse_code_attribute(&cl->methods[i].code, &b) == -1) {
+                    return -1;
+                }
+            }
+        }
+
     }
     return 0;
 }
 
 int parse_attributes(ClassFile *cl, ByteBuf *buf) {
     if(_parse_attributes_helper(
-            cl, buf, &cl->n_attributes, &cl->attributes) == -1) {
+            buf, &cl->n_attributes, &cl->attributes) == -1) {
         jvm_printf("Error parsing attributes\n");
         return -1;
     }
@@ -405,18 +419,13 @@ int process_methods(JClass *cl, ClassFile *cf) {
             return -1;
         }
 
-        // process attributes
-        for(int j=0;j<cf->methods[i].attributes_count;j++) {
-            attribute_info a = cf->methods[i].attributes[j];
-            String *name = cf_constants_get_string(cf, a.attribute_name_index);
-            if(str_compare_raw(name, "Code") == 0) {
-                ByteBuf b;
-                bytebuf_create(&b, a.data, a.attribute_length);
-                if(parse_code_attribute(&cl->methods[i].code, &b) == -1) {
-                    return -1;
-                }
-            }
-        }
+        // process code
+        cl->methods[i].code.code = cf->methods[i].code.code;
+        cl->methods[i].code.code_length = cf->methods[i].code.code_length;
+        cl->methods[i].code.max_locals = cf->methods[i].code.max_locals;
+        cl->methods[i].code.max_stack = cf->methods[i].code.max_stack;
+        cl->methods[i].code.exception_table_length = cf->methods[i].code.exception_table_length;
+        cl->methods[i].code.exception_table = cf->methods[i].code.exception_table;
     }
     return 0;
 }

@@ -143,6 +143,9 @@ struct method_info {
     u2             descriptor_index;
     u2             attributes_count;
     attribute_info *attributes;
+
+    // derived attributes
+    Code_attribute code;
 };
 
 struct ClassFile {
