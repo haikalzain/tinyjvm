@@ -13,6 +13,7 @@ static int ht_resize(HashTable *ht, uint32_t size) {
     int old_size = ht->size;
     ht->size = size;
     ht->items = jmalloc(size * sizeof(ht->items[0]));
+    ht->count = 0;
     for(int i =0;i<size;i++) {
         ht->items[i].key = NULL;
         ht->items[i].next = NULL;
@@ -38,7 +39,7 @@ static int key_cmp(String *str1, String *str2) {
 
 /* returns hash entry for key if exists. otherwise NULL. */
 static HashEntry *ht_get_entry(HashTable *ht, String *key) {
-    uint32_t index = key->hash & ht->size;
+    uint32_t index = key->hash & (ht->size - 1);
     HashEntry *cur = &ht->items[index];
     while(cur->key != NULL) {
         if(key_cmp(key, cur->key) == 0) {
@@ -54,7 +55,7 @@ static HashEntry *ht_get_entry(HashTable *ht, String *key) {
 }
 
 static void __ht_put(HashTable *ht, String *key, HashTableValue value) {
-    uint32_t index = key->hash & ht->size;
+    uint32_t index = key->hash & (ht->size - 1);
     HashEntry *cur = &ht->items[index];
     if(cur->key == NULL) {
         cur->key = key;
@@ -72,10 +73,10 @@ static void __ht_put(HashTable *ht, String *key, HashTableValue value) {
             for(int i =1;i<ht->size;i++) {
                 uint32_t ii = idx + i;
                 ii = (ii >= ht->size) ? ii - ht->size : ii;
-                if((cur + ii)->key == NULL) {
-                    cur->next = (cur + ii);
-                    cur->next->key = key;
-                    cur->next->value = value;
+                if(ht->items[ii].key == NULL) {
+                    ht->items[ii].key = key;
+                    ht->items[ii].value = value;
+                    cur->next = &ht->items[ii];
                     ht->count++;
                     return;
                 }
@@ -96,7 +97,7 @@ void ht_init(HashTable *ht) {
 }
 
 void ht_put(HashTable *ht, String *key, HashTableValue value) {
-    if(ht->count * 2 > ht->size) {
+    if(ht->count * 2 >= ht->size) {
         ht_resize(ht, ht->size * 2);
     }
     __ht_put(ht, key, value);

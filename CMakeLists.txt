@@ -48,6 +48,14 @@ add_executable(test_interpreter
         hashtable.c
         hashtable.h
         tests/test_interpreter.c)
+add_executable(test_hashtable
+        tests/test_hashtable.c
+        hashtable.h
+        hashtable.c
+        string.h
+        string.c
+        util.c
+        util.h)
 add_dependencies(test_interpreter java_lib)
 #add_executable(tinyjvm jvm.h util.c class_loader.c util.h tests/test_loader.c)
 
