@@ -12,6 +12,7 @@
 #include "string.h"
 #include "jni.h"
 #include "class_loader.h"
+#include "hashtable.h"
 
 typedef struct JByteCode {
     u2 max_stack;
@@ -86,7 +87,7 @@ struct JClass {
     field_info     *fields;
     u2             n_methods;
     JMethod    *methods;
-    //JMethod *method; should be a hashmap
+    HashTable methods_table;
 
     ClassFile *cf;
 };

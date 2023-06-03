@@ -30,6 +30,8 @@ u8 bytebuf_readu8(ByteBuf *buf);
 
 int bytebuf_readbytes(ByteBuf *buf, u1 *bytes, size_t size);
 
+uint32_t fnv_32_hash(const u1 *str, int len);
+
 int read_file(const char *filename, ByteBuf *b);
 
 #endif //TINYJVM_UTIL_H

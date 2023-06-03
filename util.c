@@ -101,3 +101,12 @@ int bytebuf_readbytes(ByteBuf *buf, u1 *bytes, size_t size) {
     buf->off += size;
     return 0;
 }
+
+uint32_t fnv_32_hash(const u1 *str, int len) {
+    uint32_t hash = 2166136261u;
+    for(int i=0;i<len;i++) {
+        hash ^= (uint32_t)(unsigned char)str[i];
+        hash *= 16777619u;
+    }
+    return hash;
+}

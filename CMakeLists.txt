@@ -26,7 +26,9 @@ add_executable(test_loader
         tests/test.h
         include/jni.h
         string.c
-        string.h)
+        string.h
+        hashtable.c
+        hashtable.h)
 
 add_executable(test_interpreter
         jvm.h
@@ -43,6 +45,8 @@ add_executable(test_interpreter
         include/jni.h
         string.c
         string.h
+        hashtable.c
+        hashtable.h
         tests/test_interpreter.c)
 add_dependencies(test_interpreter java_lib)
 #add_executable(tinyjvm jvm.h util.c class_loader.c util.h tests/test_loader.c)

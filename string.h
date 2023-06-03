@@ -11,6 +11,7 @@ typedef struct String {
     u2 size;
     u2 cap;
     u1 *data;
+    uint32_t hash;
 } String;
 
 String *str_from_c(char *cstr);

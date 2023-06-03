@@ -367,6 +367,7 @@ cp_tags cf_constants_get_tag(ClassFile *class, u2 index) {
 }
 
 int process_methods(JClass *cl, ClassFile *cf) {
+    ht_init(&cl->methods_table);
     cl->methods = jmalloc(sizeof(cl->methods[0]) * cf->n_methods);
     cl->n_methods = cf->n_methods;
     for(int i=0;i<cl->n_methods;i++) {
@@ -391,6 +392,8 @@ int process_methods(JClass *cl, ClassFile *cf) {
         cl->methods[i].code.max_stack = cf->methods[i].code.max_stack;
         cl->methods[i].code.exception_table_length = cf->methods[i].code.exception_table_length;
         cl->methods[i].code.exception_table = cf->methods[i].code.exception_table;
+
+        ht_put(&cl->methods_table, cl->methods[i].name, &cl->methods[i]);
     }
     return 0;
 }

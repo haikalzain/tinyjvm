@@ -10,6 +10,7 @@ void str_create(String *str, u1 *data, u2 size) {
     str->data = data;
     str->size = size;
     str->cap = size;
+    str->hash = fnv_32_hash(data, size);
 }
 
 String *str_dup(String *str) {

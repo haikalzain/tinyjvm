@@ -20,10 +20,9 @@ JField *rt_find_field(Runtime *rt, JInstance *ins, String *name) {
 
 
 JMethod *rt_find_method(Runtime *rt, JClass *class, String *name) {
-    for(int i=0;i<class->n_methods;i++) {
-        if(str_compare(name, class->methods[i].name) == 0) {
-            return &class->methods[i];
-        }
+    JMethod *m = ht_get(&class->methods_table, name);
+    if(m != NULL) {
+        return m;
     }
     if(class->super_class != 0) {
         // can this cause infinite loop?
