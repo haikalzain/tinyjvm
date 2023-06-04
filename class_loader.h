@@ -81,7 +81,7 @@ typedef struct ModuleMainClass_attribute {
     u2 main_class_index;
 } ModuleMainClass_attribute;
 
-// fields
+// fields_table
 
 typedef enum field_flags {
     FIELD_PUBLIC = 0x0001,

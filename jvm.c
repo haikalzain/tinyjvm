@@ -8,17 +8,6 @@
 #include "jvm.h"
 #include "list.h"
 
-JField *rt_find_field(Runtime *rt, JInstance *ins, String *name) {
-    // doesn't work on fields in superclass. Need to resolve at class load time
-    for(int i=0;i<ins->class->n_fields;i++) {
-        if(str_compare(name, ins->fields[i].name) == 0) {
-            return &ins->fields[i];
-        }
-    }
-    return NULL;
-}
-
-
 JMethod *rt_find_method(Runtime *rt, JClass *class, String *name) {
     JMethod *m = ht_get(&class->methods_table, name);
     if(m != NULL) {
@@ -51,9 +40,6 @@ JClass *_rt_load_class(Runtime *rt, String *name) {
         if(cls == NULL) return NULL;
         int ret = read_class_from_path(cls, str_cstr(filename));
 
-        // all class fields should be init to 0
-
-
         str_free(slash);
         str_free(class);
         str_free(path);
@@ -84,6 +70,17 @@ JClass *rt_get_class(Runtime *rt, String *name) {
     // clinit if not already done
     if(cls->status == CLASS_LOADING) {
         cls->status = CLASS_INITING;
+        // set fields to 0
+        ht_init(&cls->static_fields);
+        for(int i=0;i<cls->n_fields;i++) {
+            if(cls->fields[i].access_flags & FIELD_STATIC) {
+                Value *v = jmalloc(sizeof(Value));
+                v->tag = cls->fields[i].type.type;
+                val_zero(v);
+                ht_put(&cls->static_fields, cls->fields[i].name, v);
+            }
+        }
+        // run clinit
         String *clinit_str = str_from_c("<clinit>");
         JMethod *clinit = rt_find_method(rt, cls, clinit_str);
         if (clinit != NULL) {
@@ -138,21 +135,34 @@ JMethod *rt_constant_resolve_methodref(Runtime *rt, Constant *constants, u2 inde
     return method;
 }
 
-JInstance *instance_create(JClass *cls) {
+static void instance_init_fields(Runtime *rt, JInstance *ins, JClass *cls) {
+    for(int i=0;i<cls->n_fields;i++) {
+        if(cls->fields[i].access_flags & FIELD_STATIC) continue;
+
+        if(ht_get(&ins->fields_table, cls->fields[i].name) != NULL) continue;
+        Value *v = jmalloc(sizeof(Value));
+        v->tag = cls->fields[i].type.type;
+        val_zero(v);
+        ht_put(&ins->fields_table, cls->fields[i].name, v);
+    }
+    if(cls->super_class) {
+        JClass *c = rt_constant_resolve_class(rt, cls->constants, cls->super_class);
+        assert(c != NULL);
+        instance_init_fields(rt, ins, c);
+    }
+}
+
+JInstance *instance_create(Runtime *rt, JClass *cls) {
     JInstance *ins = jmalloc(sizeof(JInstance));
     // TODO should probably check that malloc is not null
     ins->class = cls;
-    ins->fields = jmalloc(sizeof(ins->fields[0]) * cls->n_fields);
-    for(int i=0;i<ins->class->n_fields;i++) {
-        JField *field = &ins->fields[i];
-        field->name = cl_constants_get_string(ins->class, ins->class->fields[i].name_index);
-        field->value = VAL_NULL; // what to initialize fields to?
-    }
+    ht_init(&ins->fields_table);
+    instance_init_fields(rt, ins, cls);
     return ins;
 }
 
 void instance_free(JInstance *ins) {
-    jfree(ins->fields);
+    // need to delete fields_table
     jfree(ins);
 }
 
@@ -186,13 +196,52 @@ JArray *multiarray_create(Value *lengths, int n_lengths, FieldType type) {
     return arr;
 }
 
+static Value *_cls_get_field(Runtime *rt, JClass *cls, String *name) {
+    Value *v = ht_get(&cls->static_fields, name);
+    if(v != NULL) {
+        return v;
+    }
+    if(cls->super_class != 0) {
+        JClass *super = rt_constant_resolve_class(rt, cls->constants, cls->super_class);
+        return _cls_get_field(rt, super, name);
+    }
+
+    return NULL;
+}
+
+int cls_set_field(Runtime *rt, JClass *cls, u2 index, Value value) {
+    Constant field_ref = cls->constants[index];
+    JClass *c = rt_constant_resolve_class(rt, cls->constants, field_ref.double_index_info.index1);
+
+    Constant name_and_descriptor = cls->constants[field_ref.double_index_info.index2];
+    String *name = cl_constants_get_string(cls, name_and_descriptor.double_index_info.index1);
+    Value *v = _cls_get_field(rt, c, name);
+    assert(v != NULL);
+    *v = value;
+
+    return 0;
+}
+
+Value cls_get_field(Runtime *rt, JClass *cls, u2 index) {
+    Constant field_ref = cls->constants[index];
+    JClass *c = rt_constant_resolve_class(rt, cls->constants, field_ref.double_index_info.index1);
+
+    Constant name_and_descriptor = cls->constants[field_ref.double_index_info.index2];
+    String *name = cl_constants_get_string(cls, name_and_descriptor.double_index_info.index1);
+    Value *v = _cls_get_field(rt, c, name);
+    assert(v != NULL);
+
+    return *v;
+}
+
 int instance_set_field(Runtime *rt, JInstance *instance, u2 index, Value value) {
     Constant field_ref = instance->class->constants[index];
     Constant name_and_descriptor = instance->class->constants[field_ref.double_index_info.index2];
     String *name = cl_constants_get_string(instance->class, name_and_descriptor.double_index_info.index1);
-    JField *field = rt_find_field(rt, instance, name);
-    assert(field != NULL);
-    field->value = value;
+    Value *v = ht_get(&instance->fields_table, name);
+    assert(v != NULL);
+    *v = value;
+
     return 0;
 }
 
@@ -200,9 +249,9 @@ Value instance_get_field(Runtime *rt, JInstance *instance, u2 index) {
     Constant field_ref = instance->class->constants[index];
     Constant name_and_descriptor = instance->class->constants[field_ref.double_index_info.index2];
     String *name = cl_constants_get_string(instance->class, name_and_descriptor.double_index_info.index1);
-    JField *field = rt_find_field(rt, instance, name);
-    assert(field != NULL);
-    return field->value;
+    Value *v = ht_get(&instance->fields_table, name);
+    assert(v != NULL);
+    return *v;
 }
 
 
@@ -312,13 +361,14 @@ Value rt_execute_java_method(Runtime *rt, const JInstance *this, const JMethod *
                 c = rt_constant_resolve_class(rt, class->constants, index);
                 // should check that this isn't an interface/abstract before trying to instantiate
                 assert(c != NULL);
-                ins = instance_create(c);
+                ins = instance_create(rt, c);
                 assert(ins != NULL);
                 *sp++ = MKPTR(TYPE_INSTANCE, ins);
                 break;
             case GETSTATIC:
                 index = read_u2(ip);
                 ip += 2;
+                *sp++ = cls_get_field(rt, class, index);
                 break;
             case GETFIELD:
                 index = read_u2(ip);
@@ -331,6 +381,10 @@ Value rt_execute_java_method(Runtime *rt, const JInstance *this, const JMethod *
                 *sp++ = instance_get_field(rt, ins, index);
                 break;
             case PUTSTATIC:
+                index = read_u2(ip);
+                ip += 2;
+                v = *(--sp);
+                cls_set_field(rt, class, index, v);
                 break;
             case PUTFIELD:
                 index = read_u2(ip);

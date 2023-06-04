@@ -7,7 +7,7 @@ What works
 - basic JNI
 
 TODO
-- implement class and instance fields
+- implement class and instance fields_table
 - get string working
 - exceptions, including JNI
 - get file i/o and streams working

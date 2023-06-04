@@ -37,13 +37,21 @@ void test_self_initialize() {
     rt_init(&rt, NULL);
     Value v = execute_static_method(&rt, "SelfInitialize", "test", NULL, 0);
     ASSERT_EQ(TYPE_INT, VAL_GET_TAG(v));
+    ASSERT_EQ(2, v.i);
+
+    v = execute_static_method(&rt, "SelfInitialize", "test2", NULL, 0);
+    ASSERT_EQ(TYPE_INT, VAL_GET_TAG(v));
     ASSERT_EQ(3, v.i);
+
+    v = execute_static_method(&rt, "SelfInitialize", "test3", NULL, 0);
+    ASSERT_EQ(TYPE_INT, VAL_GET_TAG(v));
+    ASSERT_EQ(5, v.i);
 }
 
 int main() {
     test_arrays();
    // test_exceptions();
-    //test_self_initialize();
+    test_self_initialize();
     test_execute_function_calls_class();
     PRINT_STATS();
 }

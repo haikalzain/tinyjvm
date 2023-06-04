@@ -49,7 +49,8 @@ typedef Value (*JBuiltinFunction)(Runtime *rt, JInstance *ins, Value *args, u1 n
 
 struct JField {
     String *name;
-    Value value;
+    FieldType type;
+    u2             access_flags;
 };
 
 struct JMethod {
@@ -84,17 +85,18 @@ struct JClass {
     u2             n_interfaces;
     u2             *interfaces; // indexes into constant table
     u2             n_fields;
-    field_info     *fields;
+    JField    *fields;
     u2             n_methods;
     JMethod    *methods;
     HashTable methods_table;
+    HashTable static_fields; // static fields_table for this class only
 
     ClassFile *cf;
 };
 
 struct JInstance {
     JClass *class;
-    JField *fields;
+    HashTable fields_table; // contains copy of all fields_table
 };
 
 struct JArray {
@@ -142,10 +144,12 @@ String *cl_constants_get_string(JClass *class, u2 index);
 
 JMethod *rt_find_method(Runtime *rt, JClass *class, String *name);
 JField *rt_find_field(Runtime *rt, JInstance *ins, String *name);
-JInstance *instance_create(JClass *class);
+JInstance *instance_create(Runtime *rt, JClass *class);
 int instance_set_field(Runtime *rt, JInstance *instance, u2 index, Value value);
 Value instance_get_field(Runtime *rt, JInstance *instance, u2 index);
 void instance_free(JInstance *instance);
+int cls_set_field(Runtime *rt, JClass *cls, u2 index, Value value);
+Value cls_get_field(Runtime *rt, JClass *cls, u2 index);
 
 Value rt_execute_method(Runtime *rt, const JInstance *this, const JMethod *method, Value *args, u1 nargs);
 

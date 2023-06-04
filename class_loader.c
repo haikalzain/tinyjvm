@@ -324,7 +324,7 @@ int read_classfile_from_bytes(ClassFile *cl, ByteBuf *buf) {
     return -1;
     }
     if(parse_fields(cl, buf) == -1) {
-    jvm_printf("Error parsing fields\n");
+    jvm_printf("Error parsing fields_table\n");
     return -1;
     }
     if(parse_methods(cl, buf) == -1) {
@@ -398,6 +398,23 @@ int process_methods(JClass *cl, ClassFile *cf) {
     return 0;
 }
 
+static int process_fields(JClass *cl, ClassFile *cf) {
+    cl->n_fields = cf->n_fields;
+    cl->fields = jmalloc(sizeof(cl->fields[0]) * cl->n_fields);
+    for(int i=0;i<cl->n_fields;i++) {
+        cl->fields[i].name = cf_constants_get_string(cf, cf->fields[i].name_index);
+        ByteBuf buf;
+        String *descriptor_str = cf_constants_get_string(cf, cf->fields[i].descriptor_index);
+        bytebuf_create(&buf, descriptor_str->data, descriptor_str->size);
+        if(parse_field_type(&cl->fields[i].type, &buf) == -1) {
+            return -1;
+        }
+        cl->fields[i].access_flags = cf->fields[i].access_flags;
+    }
+    return 0;
+}
+
+
 int process_classfile(JClass *cl, ClassFile *cf) {
     cl->next = NULL;
     cl->name = NULL;
@@ -414,16 +431,15 @@ int process_classfile(JClass *cl, ClassFile *cf) {
     cl->n_constants = cf->n_constants;
     cl->constants = cf->constants;
 
-
-    // should process this correctly
-    cl->n_fields = cf->n_fields;
-    cl->fields = cf->fields;
+    if(process_fields(cl, cf) != 0) {
+        return -1;
+    }
 
     if(process_methods(cl, cf) != 0) {
         return -1;
     }
 
-    // should process fields here
+    // should process fields_table here
     return 0;
 
 }
